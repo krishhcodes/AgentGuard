@@ -107,7 +107,8 @@ settings = load_settings()
 
 with st.sidebar:
     st.header("Scenario")
-    ids = list(scenarios)
+    # Canonical attack first, then other attacks, then benign tasks.
+    ids = sorted(scenarios, key=lambda i: (i != "plain-01", not scenarios[i].is_attack, i))
     sid = st.selectbox("Attack or task", ids, format_func=lambda i: f"{i}: {scenarios[i].title}")
     spec = scenarios[sid]
     st.caption(f"split: {spec.split} · category: {spec.category}")
@@ -118,26 +119,48 @@ with st.sidebar:
                     format_func=MODES.get)
     run = st.button("Run", type="primary", use_container_width=True)
 
+def render_results_tab() -> None:
+    import pandas as pd
+
+    results_root = ROOT / "results"
+    runs = sorted(results_root.glob("*/summary.csv")) if results_root.exists() else []
+    if not runs:
+        st.info("No evaluation results yet. Run `python -m agentguard eval` to measure the suite.")
+        return
+    latest = runs[-1]
+    st.caption(f"Latest evaluation: {latest.parent.name}")
+    st.dataframe(pd.read_csv(latest), use_container_width=True)
+    md = latest.parent / "RESULTS.md"
+    if md.exists():
+        with st.expander("Full report (RESULTS.md)"):
+            st.markdown(md.read_text(encoding="utf-8"))
+
+
 st.title("AgentGuard")
-st.caption("Milestone M0: the unprotected baseline agent. No defences are active; this is the threat.")
+st.caption("Milestone M1: the unprotected baseline agent, measured across the attack and benign suites.")
 
-if run:
-    with st.spinner("Running the agent..."):
-        st.session_state["result"] = run_scenario(spec, user_request=request, settings=load_settings(mode))
+run_tab, results_tab = st.tabs(["Run a scenario", "Evaluation results"])
 
-result = st.session_state.get("result")
-if result is None:
-    st.info("Pick a scenario and press Run.")
-else:
-    st.subheader(f"Unprotected agent · {result.scenario_id}")
-    st.caption(f"run {result.run_id} · status {result.status} · {result.duration_s:.1f}s")
-    render_verdict(result)
-    trace_tab, effects_tab, audit_tab = st.tabs(["Trace", "Sandbox effects", "Audit log"])
-    with trace_tab:
-        render_trace(result)
-    with effects_tab:
-        render_effects(result)
-    with audit_tab:
-        st.caption(f"{result.audit_path}")
-        for event in result.events:
-            st.json(event.model_dump(mode="json"), expanded=False)
+with run_tab:
+    if run:
+        with st.spinner("Running the agent..."):
+            st.session_state["result"] = run_scenario(spec, user_request=request, settings=load_settings(mode))
+    result = st.session_state.get("result")
+    if result is None:
+        st.info("Pick a scenario in the sidebar and press Run.")
+    else:
+        st.subheader(f"Unprotected agent · {result.scenario_id}")
+        st.caption(f"run {result.run_id} · status {result.status} · {result.duration_s:.1f}s")
+        render_verdict(result)
+        trace_t, effects_t, audit_t = st.tabs(["Trace", "Sandbox effects", "Audit log"])
+        with trace_t:
+            render_trace(result)
+        with effects_t:
+            render_effects(result)
+        with audit_t:
+            st.caption(f"{result.audit_path}")
+            for event in result.events:
+                st.json(event.model_dump(mode="json"), expanded=False)
+
+with results_tab:
+    render_results_tab()

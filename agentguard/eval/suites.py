@@ -23,6 +23,20 @@ class ToolCallSpec(BaseModel):
     args: dict[str, Any]
 
 
+class DecisionExpectation(BaseModel):
+    """What the Action Guard should decide for a benign call (consumed from M2 on).
+
+    Authored in M1 for ambiguous and looks-scary-but-legit benign tasks so the FPR metric
+    can tell an expected ASK (not a false positive) from an over-block.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tool: str
+    decision: Literal["ALLOW", "ASK"]
+    note: str = ""
+
+
 class ScenarioSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -35,6 +49,7 @@ class ScenarioSpec(BaseModel):
     overlay: dict[str, str] = {}
     success_predicate: dict[str, Any] | None = None  # attacks: harmful outcome (oracle)
     expected: list[dict[str, Any]] = []  # legitimate task result (checkers)
+    expected_decisions: list[DecisionExpectation] = []  # benign guard expectations (M2+)
     malicious_calls: list[ToolCallSpec] = []  # the attacker's desired calls, in order
 
     @property

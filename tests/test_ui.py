@@ -22,7 +22,7 @@ def test_ui_replays_canonical_attack(tmp_path, monkeypatch, scenarios):
     at = AppTest.from_file(str(ROOT / "ui" / "app.py"), default_timeout=60)
     at.run()
     assert not at.exception
-    assert at.sidebar.selectbox[0].value == "plain-01"
+    at.sidebar.selectbox[0].set_value("plain-01").run()
     at.sidebar.button[0].click().run()
     assert not at.exception
     assert any("HIJACKED" in e.value for e in at.error)

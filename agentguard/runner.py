@@ -12,12 +12,12 @@ from typing import Any
 
 from langchain_core.messages import BaseMessage, HumanMessage
 
-from agentguard.agent.graph import build_baseline_graph
+from agentguard.agent.graph import build_graph
 from agentguard.agent.state import Runtime
 from agentguard.audit import AuditEvent, AuditLogger
 from agentguard.audit.events import truncate
 from agentguard.config import Settings, load_settings
-from agentguard.eval.checkers import TaskVerdict, check_task
+from agentguard.eval.checkers import CheckContext, TaskVerdict, check_task
 from agentguard.eval.oracle import AttackVerdict, OracleContext, judge_attack
 from agentguard.eval.suites import ScenarioSpec
 from agentguard.llm import LLMClient
@@ -25,7 +25,8 @@ from agentguard.policy import Policy, load_policy
 from agentguard.rag.retriever import Retriever
 from agentguard.sandbox import Sandbox, ToolRegistry
 
-CONFIG_NAME = "baseline"  # M0 has only the unprotected configuration
+CONFIGS = ("baseline",)  # grows as defences land (guard_only, firewall_only, full, ...)
+DEFAULT_CONFIG = "baseline"
 
 
 @dataclass
@@ -53,11 +54,14 @@ def new_run_id() -> str:
 def run_scenario(
     spec: ScenarioSpec,
     *,
+    config: str = DEFAULT_CONFIG,
     user_request: str | None = None,
     llm: Any = None,
     settings: Settings | None = None,
     policy: Policy | None = None,
 ) -> RunResult:
+    if config not in CONFIGS:
+        raise ValueError(f"unknown config {config!r}; available: {CONFIGS}")
     settings = settings or load_settings()
     policy = policy or load_policy()
     request = (user_request or spec.user_request).strip()
@@ -69,7 +73,7 @@ def run_scenario(
     audit = AuditLogger(settings.runs_dir / run_id / "audit.jsonl")
     rt = Runtime(
         run_id=run_id,
-        config_name=CONFIG_NAME,
+        config_name=config,
         scenario_id=spec.id,
         settings=settings,
         sandbox=sandbox,
@@ -78,7 +82,7 @@ def run_scenario(
         llm=llm,
         audit=audit,
     )
-    audit.emit(AuditEvent(run_id=run_id, config=CONFIG_NAME, scenario_id=spec.id, layer="runner",
+    audit.emit(AuditEvent(run_id=run_id, config=config, scenario_id=spec.id, layer="runner",
                           event="run_started", data={"user_request": truncate(request, 500),
                                                      "llm_mode": settings.llm_mode}))
     started = time.perf_counter()
@@ -93,7 +97,7 @@ def run_scenario(
     }
     error = None
     try:
-        final = build_baseline_graph().invoke(initial, {"configurable": {"runtime": rt}, "recursion_limit": 100})
+        final = build_graph(config).invoke(initial, {"configurable": {"runtime": rt}, "recursion_limit": 100})
         status, answer, messages = final["status"], final["final_answer"], final["messages"]
         if status == "error":
             error = messages[-1].content if messages else "agent error"
@@ -104,10 +108,10 @@ def run_scenario(
 
     ctx = OracleContext(sandbox=sandbox, user_request=request)
     attack = judge_attack(spec.success_predicate, ctx) if spec.success_predicate else None
-    task = check_task(spec.expected, answer) if spec.expected else None
+    task = check_task(spec.expected, CheckContext(answer, sandbox)) if spec.expected else None
     audit.emit(
         AuditEvent(
-            run_id=run_id, config=CONFIG_NAME, scenario_id=spec.id, layer="runner", event="run_completed",
+            run_id=run_id, config=config, scenario_id=spec.id, layer="runner", event="run_completed",
             status=status,
             reason=truncate(error, 500) if error else None,
             data={
@@ -120,5 +124,5 @@ def run_scenario(
             latency_ms={"run_total": round(duration * 1000, 1)},
         )
     )
-    return RunResult(run_id, spec.id, CONFIG_NAME, request, status, answer, messages, sandbox, attack, task,
+    return RunResult(run_id, spec.id, config, request, status, answer, messages, sandbox, attack, task,
                      audit.path, audit.events, error, duration)

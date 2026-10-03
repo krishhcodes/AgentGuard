@@ -3,10 +3,11 @@
 A prompt-injection shield for tool-using RAG agents (hackathon PS3).
 Design: [ARCHITECTURE.md](ARCHITECTURE.md) · [THREAT_MODEL.md](THREAT_MODEL.md) · [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
-**Status: milestone M0.** A complete, deliberately vulnerable system: a LangGraph RAG agent over a fake
-vendor-quotation corpus, with four mock tools, a fake confidential folder, an outcome oracle, an audit
-log, a CLI and a Streamlit view. **No defences exist yet.** That is intentional: the threat is measured
-before anything is built to stop it.
+**Status: milestone M1 (in progress).** The vulnerable system from M0, plus the attack/benign suites
+and the evaluation harness. **No defences exist yet** — the threat is measured before anything is built
+to stop it. Suite so far: 15 attacks (11 dev + 4 unseen, across all 5 categories) and 10 benign tasks
+(clean, tool-using, looks-scary-but-legit, ambiguous). The full 28-attack / 20-benign set and the live
+baseline gate run (D2: baseline hijacked >= 70%) are the remaining M1 steps.
 
 ## Setup (Windows, PowerShell or Git Bash)
 
@@ -23,7 +24,9 @@ Put your Groq key in `.env` (it is git-ignored): `GROQ_API_KEY=...`
 .venv\Scripts\python -m agentguard doctor                       # gate D1: key, model, tool calling
 .venv\Scripts\python -m agentguard list                         # scenarios
 .venv\Scripts\python -m agentguard run --scenario plain-01      # canonical attack, CLI trace
-.venv\Scripts\python -m streamlit run ui/app.py                 # demo UI
+.venv\Scripts\python -m agentguard eval --configs baseline --splits dev,benign --repeats 3 --delay 2
+.venv\Scripts\python -m agentguard freeze-manifest --verify     # unseen-set integrity check
+.venv\Scripts\python -m streamlit run ui/app.py                 # demo UI (Run + Evaluation results tabs)
 .venv\Scripts\python -m pytest                                  # offline tests (no network, no API key)
 ```
 

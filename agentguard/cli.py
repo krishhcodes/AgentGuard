@@ -117,6 +117,48 @@ def cmd_doctor(args) -> int:
     return 0
 
 
+def cmd_eval(args) -> int:
+    from datetime import datetime
+
+    from agentguard.eval.harness import run_suite
+    from agentguard.eval.report import render_markdown, write_summary_csv
+
+    configs = [c.strip() for c in args.configs.split(",") if c.strip()]
+    splits = [s.strip() for s in args.splits.split(",") if s.strip()]
+    out_dir = ROOT / "results" / datetime.now().strftime("%Y%m%d-%H%M%S")
+    print(f"configs={configs} splits={splits} repeats={args.repeats} mode={args.llm_mode or 'record'}")
+    print(f"writing to {out_dir}\n")
+    records = run_suite(
+        configs=configs, splits=splits, repeats=args.repeats,
+        settings=load_settings(args.llm_mode),
+        out_csv=out_dir / "runs.csv", delay_s=args.delay,
+        progress=lambda line: print(line, flush=True),
+    )
+    write_summary_csv(records, out_dir / "summary.csv")
+    markdown = render_markdown(records)
+    (out_dir / "RESULTS.md").write_text(markdown, encoding="utf-8")
+    print("\n" + markdown)
+    print(f"Artifacts: {out_dir}")
+    return 0
+
+
+def cmd_freeze_manifest(args) -> int:
+    from agentguard.eval.freeze import verify_manifest, write_manifest
+
+    if args.verify:
+        problems = verify_manifest()
+        if problems:
+            print("Unseen manifest MISMATCH:")
+            for p in problems:
+                print(f"  - {p}")
+            return 1
+        print("ok    unseen set matches MANIFEST.sha256")
+        return 0
+    path = write_manifest()
+    print(f"wrote {path}")
+    return 0
+
+
 def cmd_schema(args) -> int:
     from agentguard.audit.events import write_schema
 
@@ -139,6 +181,16 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--request", help="override the scenario's user request")
     run.add_argument("--llm-mode", choices=["off", "record", "replay"], help="default: record")
     run.set_defaults(func=cmd_run)
+    ev = sub.add_parser("eval", help="run suites x configs x repeats and write metrics")
+    ev.add_argument("--configs", default="baseline", help="comma-separated (M1: baseline only)")
+    ev.add_argument("--splits", default="dev,benign", help="comma-separated: dev, unseen, benign")
+    ev.add_argument("--repeats", type=int, default=3)
+    ev.add_argument("--llm-mode", choices=["off", "record", "replay"])
+    ev.add_argument("--delay", type=float, default=0.0, help="seconds between runs (free-tier pacing)")
+    ev.set_defaults(func=cmd_eval)
+    fm = sub.add_parser("freeze-manifest", help="write or verify the unseen-set SHA-256 manifest")
+    fm.add_argument("--verify", action="store_true")
+    fm.set_defaults(func=cmd_freeze_manifest)
     sub.add_parser("doctor", help="check the LLM provider, model and tool calling (gate D1)").set_defaults(func=cmd_doctor)
     sub.add_parser("schema", help="export the audit event JSON schema").set_defaults(func=cmd_schema)
     args = parser.parse_args(argv)
