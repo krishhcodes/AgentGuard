@@ -64,6 +64,7 @@ class SandboxState:
     db_mutations: list[DbMutation] = field(default_factory=list)
     read_log: list[FileRead] = field(default_factory=list)
     web_queries: list[str] = field(default_factory=list)
+    executed_calls: dict[str, str] = field(default_factory=dict)  # dedup key -> prior result
 
 
 def parse_web_page(source: str, raw: str) -> WebPage:

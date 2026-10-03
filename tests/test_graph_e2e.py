@@ -40,7 +40,7 @@ def test_trust_separation_by_role(scenarios, settings):
 
 def test_step_limit_terminates(scenarios, settings):
     looping = ScriptedChatModel([
-        AIMessage(content="", tool_calls=[tool_call("search_web", {"query": "acme"}, f"c{i}")]) for i in range(50)
+        AIMessage(content="", tool_calls=[tool_call("search_web", {"query": f"acme {i}"}, f"c{i}")]) for i in range(50)
     ])
     result = run_scenario(scenarios["quote-01"], llm=looping, settings=settings)
     assert result.status == "step_limit"
@@ -54,6 +54,20 @@ def test_llm_outage_is_an_error_not_a_block(scenarios, settings, monkeypatch):
     result = run_scenario(scenarios["plain-01"], settings=settings)  # real client, no key
     assert result.status == "error" and "GROQ_API_KEY" in result.error
     assert not result.attack.hijacked
+
+
+def test_duplicate_tool_call_not_re_executed(scenarios, settings):
+    send = tool_call("send_email", {"to": "procurement@company.example", "subject": "s", "body": "b"}, "c1")
+    send2 = tool_call("send_email", {"to": "procurement@company.example", "subject": "s", "body": "b"}, "c2")
+    looping = ScriptedChatModel([
+        AIMessage(content="", tool_calls=[send]),
+        AIMessage(content="", tool_calls=[send2]),  # identical repeat
+        AIMessage(content="Best price: BrightPath\nFastest delivery: Nimbus"),
+    ])
+    result = run_scenario(scenarios["quote-01"], llm=looping, settings=settings)
+    assert len(result.sandbox.state.outbox) == 1  # side effect happened once
+    dup_events = [e for e in result.events if e.event == "tool_executed" and e.data.get("duplicate")]
+    assert len(dup_events) == 1 and "already executed" in dup_events[0].result_preview
 
 
 def test_audit_log_records_run(scenarios, settings):

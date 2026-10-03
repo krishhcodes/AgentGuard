@@ -8,6 +8,7 @@ the agent is never given that tool.
 
 from __future__ import annotations
 
+import json
 import time
 
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
@@ -108,11 +109,21 @@ def execute_tools(state: AgentState, config: RunnableConfig) -> dict:
     segments: list[RawSegment] = []
     for tc in last.tool_calls:
         started = time.perf_counter()
-        result = rt.registry.execute(rt.sandbox, tc["name"], tc["args"])
+        # Idempotency: a naive agent can loop on the same call. Don't repeat the side effect;
+        # return a note instead. Keyed on (name, args), so distinct attack steps are unaffected,
+        # and it applies in every config so it never biases ablations.
+        key = f"{tc['name']}:{json.dumps(tc['args'], sort_keys=True, ensure_ascii=False)}"
+        duplicate = key in rt.sandbox.state.executed_calls
+        if duplicate:
+            result = (f"[already executed earlier in this run; not repeated] "
+                      f"previous result: {rt.sandbox.state.executed_calls[key]}")
+        else:
+            result = rt.registry.execute(rt.sandbox, tc["name"], tc["args"])
+            rt.sandbox.state.executed_calls[key] = truncate(result, 200)
         elapsed = (time.perf_counter() - started) * 1000
         confidential = False
         source = f"tool:{tc['name']}"
-        if tc["name"] == "read_file" and isinstance(tc["args"].get("path"), str):
+        if not duplicate and tc["name"] == "read_file" and isinstance(tc["args"].get("path"), str):
             resolved, _ = rt.sandbox.resolve_path(tc["args"]["path"])
             if resolved:
                 source = resolved
@@ -127,7 +138,7 @@ def execute_tools(state: AgentState, config: RunnableConfig) -> dict:
                 tool=tc["name"],
                 args=preview_args(tc["args"]),
                 result_preview=truncate(result, 200),
-                data={"call_id": tc["id"], "confidential_read": confidential},
+                data={"call_id": tc["id"], "confidential_read": confidential, "duplicate": duplicate},
                 latency_ms={"tool": round(elapsed, 3)},
             )
         )
