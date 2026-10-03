@@ -97,12 +97,16 @@ def cmd_doctor(args) -> int:
     from agentguard.policy import load_policy
     from agentguard.sandbox import ToolRegistry
 
+    from agentguard.llm import load_groq_keys
+
     cfg = load_role_config("agent")
     print(f"agent role: provider={cfg.provider} model={cfg.model}")
-    if not os.environ.get("GROQ_API_KEY"):
-        print("FAIL  GROQ_API_KEY is not set in .env")
+    keys = load_groq_keys()
+    if not keys:
+        print("FAIL  no Groq key set (add GROQ_API_KEY or GROQ_API_KEYS to .env)")
         return 1
-    print("ok    GROQ_API_KEY is set")
+    print(f"ok    {len(keys)} Groq key(s) configured"
+          + (f" (~{len(keys) * 200}k tokens/day across the free tier)" if len(keys) > 1 else ""))
     try:
         from groq import Groq
 

@@ -71,3 +71,69 @@ def test_agent_retries_one_blank_reply(scenarios, settings):
     llm = ScriptedChatModel([AIMessage(content=""), AIMessage(content=COMPARISON_ANSWER)])
     result = run_scenario(scenarios["quote-01"], llm=llm, settings=settings)
     assert result.task.completed and llm.calls == 2
+
+
+# ---- multi-key rotation (5-key free-tier budget) --------------------------------
+
+TPD_429 = "Error code: 429 - rate_limit_exceeded: limit tokens per day. Please try again in 7m12s."
+
+
+def test_classify_rate_limit_tpd_vs_tpm():
+    from agentguard.llm import classify_rate_limit
+
+    assert classify_rate_limit(Exception(TPD_429))[0] == "tpd"
+    assert classify_rate_limit(Exception("429 rate_limit try again in 172.5ms"))[0] == "tpm"
+    assert classify_rate_limit(Exception("1h reset per day"))[0] is None  # not a rate-limit error
+    assert classify_rate_limit(Exception("invalid api key")) == (None, 0.0)
+
+
+def test_load_groq_keys_dedupes_and_orders(monkeypatch):
+    from agentguard.llm import load_groq_keys
+
+    monkeypatch.setattr("agentguard.llm.dotenv_values", lambda path: {})
+    for n in ("GROQ_API_KEY", "GROQ_API_KEY1", "GROQ_API_KEY_2", "GROQ_API_KEYS"):
+        monkeypatch.delenv(n, raising=False)
+    monkeypatch.setenv("GROQ_API_KEY", "k0")
+    monkeypatch.setenv("GROQ_API_KEYS", "k0, k1 k2")
+    monkeypatch.setenv("GROQ_API_KEY_2", "k3")
+    assert load_groq_keys() == ["k0", "k1", "k2", "k3"]
+
+
+def _per_key_live(monkeypatch, tmp_path, keys, failing):
+    """Wire a LLMClient over a fake _LazyLive whose per-key models fail (429 TPD) for `failing` keys."""
+    import agentguard.llm as llm
+
+    ring = llm._KeyRing(list(keys))
+    monkeypatch.setattr(llm, "groq_key_ring", lambda: ring)
+
+    class PerKey:
+        def __init__(self, key):
+            self.key = key
+
+        def bind_tools(self, tools):
+            return self
+
+        def invoke(self, messages):
+            if self.key in failing:
+                raise RateLimitError(TPD_429)
+            return AIMessage(content=f"ok:{self.key}")
+
+    monkeypatch.setattr(llm, "_build_live_model", lambda cfg, key=None: PerKey(key))
+    lazy = llm._LazyLive(llm.RoleConfig(provider="groq", model="m"))
+    client = llm.LLMClient("agent", "m", [], "off", tmp_path, inner=lazy)
+    client._sleep = lambda s: None
+    return client, ring
+
+
+def test_rotates_to_next_key_on_daily_cap(monkeypatch, tmp_path):
+    client, ring = _per_key_live(monkeypatch, tmp_path, ["k1", "k2", "k3"], failing={"k1"})
+    out = client.invoke([HumanMessage("x")])
+    assert out.content == "ok:k2"  # k1 was daily-capped; rotated to k2
+    assert ring.idx == 1
+
+
+def test_raises_when_all_keys_daily_capped(monkeypatch, tmp_path):
+    client, ring = _per_key_live(monkeypatch, tmp_path, ["k1", "k2"], failing={"k1", "k2"})
+    with pytest.raises(LLMUnavailable):
+        client.invoke([HumanMessage("x")])
+    assert ring.idx == 1  # walked to the last key before giving up
