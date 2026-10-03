@@ -26,3 +26,17 @@ Per-run-nonce spotlight delimiters with forged-delimiter escaping.
 ## Known limitation
 Regexes catch instruction *families*, not paraphrase. Anything they miss is the classifier's job (M6)
 and ultimately the Action Guard's (defence in depth).
+
+## Post-fix ablation (final; [RESULTS-ablation-post-fix.md](RESULTS-ablation-post-fix.md))
+After the M6 utility fix (item-level removal, quarantine only when >90% malicious), dev split, 16 attacks:
+
+| config | ASR | catch | attacked-task completion | benign completion |
+|---|---|---|---|---|
+| baseline | 62% | 0% | 88% | 92% |
+| regex_only (F0-F2 only) | 6% [1-28%] | 88% | 81% | 92% |
+| firewall_only (+ LLM classifier, spotlight) | **0%** [0-19%] | **94%** | **94%** | **100%** |
+| full (+ Action Guard) | **0%** [0-19%] | **94%** | **94%** | **100%** |
+
+The classifier is what takes the firewall from 88% to 94% catch and from 6% to 0% ASR. The guard adds no catch on dev
+here because the firewall already removes what the guard would block; its value is the guarantee when the firewall
+misses (compromised_agent: 100% blocked) and the human-approval path.
