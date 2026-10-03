@@ -3,10 +3,12 @@
 A prompt-injection shield for tool-using RAG agents (hackathon PS3).
 Design: [ARCHITECTURE.md](ARCHITECTURE.md) · [THREAT_MODEL.md](THREAT_MODEL.md) · [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
-**Status: milestone M2.** The first real defence: a **Scope Extractor** that derives the authorised
-scope from the trusted user request only (invariant P1), and an **Action Guard** that checks every
-proposed tool call against that scope with deterministic, explainable rules (ALLOW / BLOCK / ASK),
-plus an **Ask-Human** gate (LangGraph `interrupt`) wired to the CLI and the harness. Configs now:
+**Status: milestone M3.** The judge-facing demo: the unprotected baseline and the guard-protected
+agent run **side by side** on the same scenario in Streamlit, with **live Approve/Deny** for ASK
+decisions and an audit-log tab. Built on M2's defence — a **Scope Extractor** that derives the
+authorised scope from the trusted user request only (invariant P1) and an **Action Guard** that
+checks every proposed tool call with deterministic, explainable rules (ALLOW / BLOCK / ASK), plus an
+**Ask-Human** gate (LangGraph `interrupt`) wired to the CLI, the harness and now the UI. Configs:
 `baseline`, `guard_only`, `compromised_agent`.
 
 The headline property, shown first: even when the agent is **fully hijacked**, the guard blocks the
@@ -46,7 +48,7 @@ Put your Groq key in `.env` (it is git-ignored): `GROQ_API_KEY=...`
 .venv\Scripts\python -m agentguard run --scenario plain-01 --config guard_only   # same attack, BLOCKed + task done
 .venv\Scripts\python -m agentguard eval --configs baseline,guard_only,compromised_agent --splits dev,benign --repeats 3 --delay 2
 .venv\Scripts\python -m agentguard freeze-manifest --verify               # unseen-set integrity check
-.venv\Scripts\python -m streamlit run ui/app.py                           # demo UI (baseline; side-by-side is M3)
+.venv\Scripts\python -m streamlit run ui/app.py                           # demo UI: side-by-side + live Approve/Deny
 .venv\Scripts\python -m pytest                                            # offline tests (no network, no API key)
 ```
 

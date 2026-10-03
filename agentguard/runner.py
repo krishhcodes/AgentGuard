@@ -84,21 +84,25 @@ def _collect_decisions(events: list[AuditEvent]) -> list[dict]:
     return list(by_call.values())
 
 
-def run_scenario(
-    spec: ScenarioSpec,
-    *,
-    config: str = DEFAULT_CONFIG,
-    user_request: str | None = None,
-    llm: Any = None,
-    scope_llm: Any = None,
-    human: Human | None = None,
-    settings: Settings | None = None,
-    policy: Policy | None = None,
-) -> RunResult:
-    if config not in CONFIGS:
-        raise ValueError(f"unknown config {config!r}; available: {CONFIGS}")
-    settings = settings or load_settings()
-    policy = policy or load_policy()
+@dataclass
+class _RunContext:
+    spec: ScenarioSpec
+    config: str
+    request: str
+    run_id: str
+    sandbox: Sandbox
+    audit: AuditLogger
+    rt: Runtime
+    graph: Any
+    thread: dict
+    initial: dict
+    started: float
+
+
+def _setup_run(
+    spec: ScenarioSpec, *, config: str, user_request: str | None,
+    llm: Any, scope_llm: Any, settings: Settings, policy: Policy,
+) -> _RunContext:
     flags = config_flags(config)
     request = (user_request or spec.user_request).strip()
     run_id = new_run_id()
@@ -117,7 +121,6 @@ def run_scenario(
     audit.emit(AuditEvent(run_id=run_id, config=config, scenario_id=spec.id, layer="runner",
                           event="run_started", data={"user_request": truncate(request, 500),
                                                      "llm_mode": settings.llm_mode, "flags": flags}))
-    started = time.perf_counter()
     initial = {
         "run_id": run_id, "flags": flags, "user_request": request,
         "messages": [HumanMessage(request)], "pending_untrusted": [],
@@ -125,10 +128,59 @@ def run_scenario(
         "final_answer": None, "timings": {},
     }
     thread = {"configurable": {"runtime": rt, "thread_id": run_id}, "recursion_limit": 100}
+    return _RunContext(spec, config, request, run_id, sandbox, audit, rt,
+                       build_graph(config), thread, initial, time.perf_counter())
+
+
+def _finalize(ctx: _RunContext, final: Any, error: str | None, status: str,
+              answer: str | None, messages: list) -> RunResult:
+    duration = time.perf_counter() - ctx.started
+    octx = OracleContext(sandbox=ctx.sandbox, user_request=ctx.request)
+    attack = judge_attack(ctx.spec.success_predicate, octx) if ctx.spec.success_predicate else None
+    task = check_task(ctx.spec.expected, CheckContext(answer, ctx.sandbox)) if ctx.spec.expected else None
+    decisions = _collect_decisions(ctx.audit.events)
+    ctx.audit.emit(AuditEvent(
+        run_id=ctx.run_id, config=ctx.config, scenario_id=ctx.spec.id, layer="runner",
+        event="run_completed", status=status, reason=truncate(error, 500) if error else None,
+        data={
+            "hijacked": attack.hijacked if attack else None,
+            "oracle_evidence": attack.evidence if attack else [],
+            "task_completed": task.completed if task else None,
+            "task_failures": task.failed_checks if task else [],
+            "final_answer_preview": truncate(answer or "", 300),
+            "decisions": decisions,
+        },
+        latency_ms={"run_total": round(duration * 1000, 1)},
+    ))
+    return RunResult(
+        ctx.run_id, ctx.spec.id, ctx.config, ctx.request, status, answer, messages, ctx.sandbox,
+        attack, task, ctx.audit.path, ctx.audit.events, error, duration,
+        scope=(final.get("scope") if isinstance(final, dict) else None),
+        decisions=decisions,
+        timings=(final.get("timings", {}) if isinstance(final, dict) else {}),
+    )
+
+
+def run_scenario(
+    spec: ScenarioSpec,
+    *,
+    config: str = DEFAULT_CONFIG,
+    user_request: str | None = None,
+    llm: Any = None,
+    scope_llm: Any = None,
+    human: Human | None = None,
+    settings: Settings | None = None,
+    policy: Policy | None = None,
+) -> RunResult:
+    if config not in CONFIGS:
+        raise ValueError(f"unknown config {config!r}; available: {CONFIGS}")
+    settings = settings or load_settings()
+    policy = policy or load_policy()
+    ctx = _setup_run(spec, config=config, user_request=user_request, llm=llm,
+                     scope_llm=scope_llm, settings=settings, policy=policy)
     error = None
     try:
-        graph = build_graph(config)
-        final = graph.invoke(initial, thread)
+        final = ctx.graph.invoke(ctx.initial, ctx.thread)
         rounds = 0
         while isinstance(final, dict) and final.get("__interrupt__"):
             rounds += 1
@@ -136,39 +188,72 @@ def run_scenario(
                 raise RuntimeError("too many human_gate interrupts (possible loop)")
             payload = final["__interrupt__"][0].value
             answers = human(payload) if human else {a["call_id"]: "deny" for a in payload.get("asks", [])}
-            final = graph.invoke(Command(resume=answers), thread)
+            final = ctx.graph.invoke(Command(resume=answers), ctx.thread)
         status, answer, messages = final["status"], final["final_answer"], final["messages"]
         if status == "error":
             error = messages[-1].content if messages else "agent error"
     except Exception:  # keep the UI/harness alive; the error is recorded, never counted as blocked
         status, answer, messages, final = "error", None, [], {}
         error = traceback.format_exc()
-    duration = time.perf_counter() - started
+    return _finalize(ctx, final, error, status, answer, messages)
 
-    ctx = OracleContext(sandbox=sandbox, user_request=request)
-    attack = judge_attack(spec.success_predicate, ctx) if spec.success_predicate else None
-    task = check_task(spec.expected, CheckContext(answer, sandbox)) if spec.expected else None
-    decisions = _collect_decisions(audit.events)
-    audit.emit(
-        AuditEvent(
-            run_id=run_id, config=config, scenario_id=spec.id, layer="runner", event="run_completed",
-            status=status,
-            reason=truncate(error, 500) if error else None,
-            data={
-                "hijacked": attack.hijacked if attack else None,
-                "oracle_evidence": attack.evidence if attack else [],
-                "task_completed": task.completed if task else None,
-                "task_failures": task.failed_checks if task else [],
-                "final_answer_preview": truncate(answer or "", 300),
-                "decisions": decisions,
-            },
-            latency_ms={"run_total": round(duration * 1000, 1)},
-        )
-    )
-    return RunResult(
-        run_id, spec.id, config, request, status, answer, messages, sandbox, attack, task,
-        audit.path, audit.events, error, duration,
-        scope=(final.get("scope") if isinstance(final, dict) else None),
-        decisions=decisions,
-        timings=(final.get("timings", {}) if isinstance(final, dict) else {}),
-    )
+
+class RunSession:
+    """A resumable run for the UI: step the graph, surface a pending ASK, resume on a button click.
+
+    The graph and its MemorySaver live inside this object (held in st.session_state), so the
+    human-in-the-loop interrupt survives Streamlit reruns. CLI/harness use run_scenario instead.
+    """
+
+    PENDING, DONE = "pending", "done"
+
+    def __init__(self, spec: ScenarioSpec, *, config: str, user_request: str | None = None,
+                 llm: Any = None, scope_llm: Any = None,
+                 settings: Settings | None = None, policy: Policy | None = None):
+        if config not in CONFIGS:
+            raise ValueError(f"unknown config {config!r}; available: {CONFIGS}")
+        settings = settings or load_settings()
+        policy = policy or load_policy()
+        self.ctx = _setup_run(spec, config=config, user_request=user_request, llm=llm,
+                              scope_llm=scope_llm, settings=settings, policy=policy)
+        self.state: Any = None
+        self.error: str | None = None
+        self.pending_payload: dict | None = None
+
+    def _drive(self, final: Any) -> str:
+        self.state = final
+        if isinstance(final, dict) and final.get("__interrupt__"):
+            self.pending_payload = final["__interrupt__"][0].value
+            return self.PENDING
+        self.pending_payload = None
+        return self.DONE
+
+    def start(self) -> str:
+        try:
+            return self._drive(self.ctx.graph.invoke(self.ctx.initial, self.ctx.thread))
+        except Exception:
+            self.error = traceback.format_exc()
+            return self.DONE
+
+    def resume(self, answers: dict) -> str:
+        try:
+            return self._drive(self.ctx.graph.invoke(Command(resume=answers), self.ctx.thread))
+        except Exception:
+            self.error = traceback.format_exc()
+            return self.DONE
+
+    @property
+    def pending(self) -> dict | None:
+        return self.pending_payload
+
+    @property
+    def events(self) -> list[AuditEvent]:
+        return self.ctx.audit.events  # live trail, including decisions made before the pause
+
+    def result(self) -> RunResult:
+        if self.error:
+            return _finalize(self.ctx, {}, self.error, "error", None, [])
+        final = self.state
+        status, answer, messages = final["status"], final["final_answer"], final["messages"]
+        error = (messages[-1].content if messages else "agent error") if status == "error" else None
+        return _finalize(self.ctx, final, error, status, answer, messages)
