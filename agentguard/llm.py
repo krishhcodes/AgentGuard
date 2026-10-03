@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from langchain_core.messages import AIMessage, BaseMessage, message_to_dict, messages_from_dict
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, message_to_dict, messages_from_dict
 
 from dotenv import dotenv_values
 
@@ -188,6 +188,9 @@ def _build_live_model(cfg: RoleConfig, api_key: str | None = None):
     raise LLMUnavailable(f"unsupported provider {cfg.provider!r}")
 
 
+_WARMED: set[str] = set()  # models already pinged this process
+
+
 class LLMClient:
     """Invokes one role's model with tools bound, through the record/replay cache."""
 
@@ -216,12 +219,16 @@ class LLMClient:
         return cls(role, cfg.model, tools, mode, cache_dir, inner=_LazyLive(cfg))
 
     def warm(self) -> None:
-        """Build the provider client (imports, SDK setup) outside the measured path. No network call."""
+        """Pay the one-off cold-start cost (SDK import, DNS/TLS, provider spin-up: ~5 s on the first
+        call of a process) before any measured request. The ping runs once per process and model."""
         if self.mode == "replay" or not isinstance(self._inner, _LazyLive):
             return
         try:
-            self._bind(self._inner, groq_key_ring())
-        except Exception:  # warming is best-effort; a real failure resurfaces on the first invoke
+            bound = self._bind(self._inner, groq_key_ring())
+            if self.model_name not in _WARMED:
+                _WARMED.add(self.model_name)
+                bound.invoke([HumanMessage("ok")])
+        except Exception:  # best-effort; a real failure resurfaces on the first invoke
             self._bound = None
 
     def _cache_path(self, key: str) -> Path:

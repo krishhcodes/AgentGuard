@@ -13,8 +13,8 @@ scope:
   provider: groq
   model: openai/gpt-oss-20b
   temperature: 0
-  timeout_s: 30
-  max_retries: 1
+  timeout_s: 4   # latency budget: on timeout the extractor falls back to the safe default scope
+  max_retries: 0
   reasoning_effort: low  # M6: the scope call is on the critical path; low effort keeps it fast
 
 # M6: the firewall's F3 instruction classifier. It only ever sees ambiguous spans wrapped in random
@@ -23,6 +23,6 @@ classifier:
   provider: groq
   model: openai/gpt-oss-20b
   temperature: 0
-  timeout_s: 10
+  timeout_s: 3   # latency budget: on timeout the spans are FLAGged (FW-CLASSIFIER-ANOMALY)
   max_retries: 0
   reasoning_effort: low
