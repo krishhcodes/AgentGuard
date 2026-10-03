@@ -3,18 +3,30 @@
 A prompt-injection shield for tool-using RAG agents (hackathon PS3).
 Design: [ARCHITECTURE.md](ARCHITECTURE.md) · [THREAT_MODEL.md](THREAT_MODEL.md) · [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
-**Status: milestone M4.** Adds the **data-flow layer**: a shared text normalise/decode library
-(zero-width, HTML hidden channels, base64/hex/…), a session **Taint Ledger** (provenance + confidential
-overlap, incl. chunked-across-messages), and the egress rules `CONFIDENTIAL_EGRESS`,
-`SECRET_PATTERN_EGRESS` and `ARG_FROM_UNTRUSTED_SOURCE` — every guard decision is now **attributed to
-the source document/view**. Built on M3 (side-by-side demo with live Approve/Deny) and M2 (Scope
-Extractor + Action Guard + Ask-Human). Configs: `baseline`, `guard_only`, `compromised_agent`.
+**Status: milestone M6.** Two layers, defence in depth. The **Content Firewall** (input side) normalises,
+decodes and scans everything the agent reads (regex families, then an LLM classifier on the ambiguous
+band), sanitises or quarantines injections while keeping quote fields, and spotlights what remains.
+The **Action Guard** (output side) authorises every tool call against a scope computed only from the
+user's request, with a taint ledger for confidential data-flow. Even if the firewall misses, the guard holds.
+Configs: `baseline`, `regex_only`, `warning_prompt_only`, `firewall_only`, `guard_only`, `full`,
+`compromised_agent`.
 
-Measured (`gpt-oss-20b`, dev split, repeats=1; [docs/m4-ledger/](docs/m4-ledger/)): baseline dev ASR
-**62%** (10/16) → guard_only **0%**, benign completion **92→94%**, benign FPR **0%**;
-`compromised_agent` (guard alone) catch **100%** on all categories incl. multi-step — the M4 gate.
-The new `multi-04` scenario shows a *legitimately-read* confidential file caught at egress by the
-ledger, which the M2 read rule alone could not stop.
+Measured (`gpt-oss-20b`, dev split; [docs/m6-classifier/](docs/m6-classifier/), [docs/m5-firewall/](docs/m5-firewall/)):
+
+| config | dev ASR | benign completion | FPR |
+|---|---|---|---|
+| baseline | **62%** | 92% | 0% |
+| warning_prompt_only | 44% | 100% | - |
+| regex_only | 6% | 92% | - |
+| guard_only | 0% | 92% | 0% |
+| **full** | **0%** (catch **94%**) | **100%** | **0%** |
+
+PS3 gates on dev: catch >= 85% **PASS**, completion >= 90% **PASS**, FPR <= 10% **PASS**, content FPR
+0/222 **PASS**, 22/22 interventions explained **PASS**. Added median latency is ~20 ms, but the **p95 < 2 s
+gate is not met** under live Groq tail latency (see the M6 notes; honest, not tuned away).
+
+M4 (data-flow layer) in short: baseline dev ASR **62%** (10/16) -> guard_only **0%**; `compromised_agent`
+(guard alone vs a fully hijacked agent) catch **100%** incl. multi-step ([docs/m4-ledger/](docs/m4-ledger/)).
 
 The headline property, shown first: even when the agent is **fully hijacked**, the guard blocks the
 harmful action with a logged reason and the legitimate task still finishes — no content scanning
