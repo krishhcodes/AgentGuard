@@ -55,3 +55,8 @@ aborted by the Groq daily token quota and produced no results for the live-agent
 ## Honest limits
 n=4 (wide CIs); one run per config; the baseline hijack rate is below the 70% target; the unseen attacks were written
 by us, not by an independent red team.
+
+## Post-run change (outside the frozen defence code)
+After v2 the spotlight nonce became deterministic when the LLM cache is on (`runner.py`), because a random nonce in
+the agent prompt made every spotlighted request unique and so un-replayable (found while rehearsing the demo
+offline). It changes no firewall, guard, scope or text logic; forged delimiters are escaped regardless of the nonce.
