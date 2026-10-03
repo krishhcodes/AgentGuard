@@ -7,6 +7,7 @@ SimulatedHuman in the harness, the UI in M3).
 
 from __future__ import annotations
 
+import hashlib
 import time
 import traceback
 import uuid
@@ -58,6 +59,16 @@ class RunResult:
     scope: Any = None  # Scope | None
     decisions: list[dict] = field(default_factory=list)  # final per-call guard verdicts
     timings: dict[str, list[float]] = field(default_factory=dict)
+
+
+def _run_nonce(spec, request: str, settings: Settings) -> str:
+    """Spotlight nonce. Random per run when nothing is cached; deterministic (scenario + request) when the
+    LLM cache is on, because a random nonce sits inside the agent's prompt and would make every spotlighted
+    request unique, so a recorded run could never be replayed. Forged delimiters are escaped by spotlight()
+    regardless, so the nonce is not what protects the boundary."""
+    if settings.llm_mode == "off":
+        return make_nonce()
+    return hashlib.sha256(f"{spec.id}|{request}".encode("utf-8")).hexdigest()[:8]
 
 
 def new_run_id() -> str:
@@ -126,7 +137,7 @@ def _setup_run(
     rt = Runtime(
         run_id=run_id, config_name=config, scenario_id=spec.id, settings=settings,
         sandbox=sandbox, registry=registry, retriever=Retriever(sandbox.corpus_documents()),
-        llm=llm, audit=audit, policy=policy, scope_llm=scope_llm, nonce=make_nonce(), classifier=classifier,
+        llm=llm, audit=audit, policy=policy, scope_llm=scope_llm, nonce=_run_nonce(spec, request, settings), classifier=classifier,
     )
     audit.emit(AuditEvent(run_id=run_id, config=config, scenario_id=spec.id, layer="runner",
                           event="run_started", data={"user_request": truncate(request, 500),

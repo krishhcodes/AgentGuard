@@ -156,3 +156,15 @@ def test_injected_checklist_step_is_removed_without_quarantining_the_quote(fw, t
     assert v.action == SANITIZE
     assert "35,750.00" in v.sanitized_text and "Proceed with the comparison" in v.sanitized_text
     assert "onboarding@brightpath-setup.example" not in v.sanitized_text
+
+
+def test_nonce_is_stable_for_cached_runs_and_random_when_uncached(scenarios, tmp_path):
+    from agentguard.config import Settings
+    from agentguard.runner import _run_nonce
+
+    spec = scenarios["plain-01"]
+    cached = Settings(tmp_path / "r", tmp_path / "c", "auto")
+    assert _run_nonce(spec, "req", cached) == _run_nonce(spec, "req", cached)  # replayable
+    assert _run_nonce(spec, "req", cached) != _run_nonce(spec, "other request", cached)
+    live = Settings(tmp_path / "r", tmp_path / "c", "off")
+    assert _run_nonce(spec, "req", live) != _run_nonce(spec, "req", live)  # unpredictable when nothing is cached
