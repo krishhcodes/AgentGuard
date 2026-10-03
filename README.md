@@ -3,13 +3,18 @@
 A prompt-injection shield for tool-using RAG agents (hackathon PS3).
 Design: [ARCHITECTURE.md](ARCHITECTURE.md) · [THREAT_MODEL.md](THREAT_MODEL.md) · [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
-**Status: milestone M3.** The judge-facing demo: the unprotected baseline and the guard-protected
-agent run **side by side** on the same scenario in Streamlit, with **live Approve/Deny** for ASK
-decisions and an audit-log tab. Built on M2's defence — a **Scope Extractor** that derives the
-authorised scope from the trusted user request only (invariant P1) and an **Action Guard** that
-checks every proposed tool call with deterministic, explainable rules (ALLOW / BLOCK / ASK), plus an
-**Ask-Human** gate (LangGraph `interrupt`) wired to the CLI, the harness and now the UI. Configs:
-`baseline`, `guard_only`, `compromised_agent`.
+**Status: milestone M4.** Adds the **data-flow layer**: a shared text normalise/decode library
+(zero-width, HTML hidden channels, base64/hex/…), a session **Taint Ledger** (provenance + confidential
+overlap, incl. chunked-across-messages), and the egress rules `CONFIDENTIAL_EGRESS`,
+`SECRET_PATTERN_EGRESS` and `ARG_FROM_UNTRUSTED_SOURCE` — every guard decision is now **attributed to
+the source document/view**. Built on M3 (side-by-side demo with live Approve/Deny) and M2 (Scope
+Extractor + Action Guard + Ask-Human). Configs: `baseline`, `guard_only`, `compromised_agent`.
+
+Measured (`gpt-oss-20b`, dev split, repeats=1; [docs/m4-ledger/](docs/m4-ledger/)): baseline dev ASR
+**62%** (10/16) → guard_only **0%**, benign completion **92→94%**, benign FPR **0%**;
+`compromised_agent` (guard alone) catch **100%** on all categories incl. multi-step — the M4 gate.
+The new `multi-04` scenario shows a *legitimately-read* confidential file caught at egress by the
+ledger, which the M2 read rule alone could not stop.
 
 The headline property, shown first: even when the agent is **fully hijacked**, the guard blocks the
 harmful action with a logged reason and the legitimate task still finishes — no content scanning
