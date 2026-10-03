@@ -139,7 +139,7 @@ def test_raises_when_all_keys_daily_capped(monkeypatch, tmp_path):
     client, ring = _per_key_live(monkeypatch, tmp_path, ["k1", "k2"], failing={"k1", "k2"})
     with pytest.raises(LLMUnavailable):
         client.invoke([HumanMessage("x")])
-    assert ring.idx == 1  # walked to the last key before giving up
+    assert ring.idx == 0  # walked every key, then reset so a long-lived process retries from the first
 
 
 def test_invalid_api_key_is_classified_and_rotated_past(monkeypatch, tmp_path):

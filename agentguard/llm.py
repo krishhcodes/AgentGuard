@@ -291,6 +291,7 @@ class LLMClient:
                         ring.idx = 0
                         self._bound = None
                         continue
+                    ring.idx = 0  # a long-lived process (the UI) must retry from the first key next time
                     raise LLMUnavailable("all Groq API keys hit their daily token limit or are invalid") from e
                 tpm_attempts += 1  # per-minute cap: wait, then rotate once waiting is exhausted
                 if tpm_attempts >= RATE_LIMIT_ATTEMPTS:
