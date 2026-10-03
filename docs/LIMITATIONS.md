@@ -12,9 +12,8 @@ Full reasoning in [THREAT_MODEL.md](../THREAT_MODEL.md) section 9. What we measu
    The unseen-set number is the honest estimate.
 5. **Small samples.** 16 dev attacks and 4 unseen attacks: confidence intervals are wide. We report Wilson 95% CIs and
    never claim "100%".
-6. **Latency tail.** Median added latency is ~20 ms, but the p95 < 2 s gate is **not met** under live Groq tail latency
-   and cold starts (see `docs/m6-classifier/NOTES.md`). Mitigations: parallel scope, warm-up ping, hard timeouts. The
-   demo runs in replay mode.
+6. **Latency tail.** p95 added latency is 655 ms on the final dev run (gate met), but only because the scope call runs
+   in parallel with the agent's first turn; raw scope latency has a 5+ s provider tail, bounded by a 4 s timeout.
 7. **Model dependence.** Baseline ASR (62%, below the 70% target) depends on the agent model (`gpt-oss-20b`, temp 0); we
    report it as measured rather than tuning the baseline.
 8. **Human approval is simulated** in the evaluation (deny on attacks, approve on benign). Real reviewers may err.

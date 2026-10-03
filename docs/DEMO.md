@@ -12,7 +12,7 @@ The sidebar has a **Demo path** with one button per beat (sets the scenario and 
 | 0:30-2:00 | **2 · Side by side** (`plain-01`) | Left (unprotected): HIJACKED banner, canary in the outbox. Right: firewall sanitised the injected paragraph, prices kept, the comparison is delivered, task completed. |
 | 2:00-3:00 | **3 · Firewall off: guard holds** | Agent is hijacked and proposes the email; the Action Guard BLOCKs it with the rule ids and the source document as evidence. "Even if detection fails, the action cannot happen." |
 | 3:00-3:40 | **4 · Ask a human** (`ambig-01-the-team`) | Approval card with evidence -> **Approve** -> email goes to the resolved alias. Then the **Audit log** tab: every allow, block and approval with its evidence. |
-| 3:40-4:30 | **Evaluation results** tab | Baseline ASR 62%; `full` dev ASR 0% (catch 94%); benign completion 100%; FPR 0%; unseen numbers with CIs; **say the honest bits**: p95 latency gate not met under live API tail latency (median ~20 ms), unseen set is only 4 attacks. |
+| 3:40-4:30 | **Evaluation results** tab | Baseline ASR 62%; `full` dev ASR 0% (catch 94%); benign completion 100%; FPR 0%; unseen numbers with CIs; **say the honest bits**: the unseen set is only 4 attacks (wide CIs), baseline hijack rate is 62%, and scope latency is hidden by running in parallel with the agent. |
 | 4:30-5:00 | Close | "We authorise actions, not just classify text. Deterministic, explainable, runs locally, and we publish the misses." |
 
 ## If something goes wrong

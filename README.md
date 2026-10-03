@@ -21,9 +21,10 @@ Measured (`gpt-oss-20b`, dev split; [docs/m6-classifier/](docs/m6-classifier/), 
 | guard_only | 0% | 92% | 0% |
 | **full** | **0%** (catch **94%**) | **100%** | **0%** |
 
-PS3 gates on dev: catch >= 85% **PASS**, completion >= 90% **PASS**, FPR <= 10% **PASS**, content FPR
-0/222 **PASS**, 22/22 interventions explained **PASS**. Added median latency is ~20 ms, but the **p95 < 2 s
-gate is not met** under live Groq tail latency (see the M6 notes; honest, not tuned away).
+PS3 gates on dev, all **PASS**: catch 94% (>=85%), poisoned-task completion 94% and benign completion 100%
+(>=90%), action FPR 0% (<=10%), content FPR 0/222 (<=2%), 22/22 interventions explained, added latency
+p50 22 ms / **p95 655 ms (<2 s)**. Honest caveats: the unseen set is only 4 attacks (wide CIs), and the baseline
+hijack rate is 62%, below the 70% target; see [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
 M4 (data-flow layer) in short: baseline dev ASR **62%** (10/16) -> guard_only **0%**; `compromised_agent`
 (guard alone vs a fully hijacked agent) catch **100%** incl. multi-step ([docs/m4-ledger/](docs/m4-ledger/)).

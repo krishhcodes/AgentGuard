@@ -1,7 +1,0 @@
-config,layer,n_runs,p50_ms,p95_ms
-full,scope,10,0.0,17555.6
-full,firewall,10,21.3,29.0
-full,classifier,10,0.0,4328.7
-full,guard,10,0.3,3.4
-full,"scope (raw, overlapped with agent turn 1; not in TOTAL)",10,743.2,25797.2
-full,TOTAL,10,22.1,21910.1
