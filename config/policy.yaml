@@ -39,7 +39,7 @@ secret_patterns:
 firewall:
   t_low: 2
   t_high: 3
-  quarantine_fraction: 0.5   # if more than this share of a segment is malicious -> QUARANTINE
+  quarantine_fraction: 0.9   # QUARANTINE only if more than this share is malicious (utility: keep the legitimate fields of a poisoned quote)
   weights:
     FW-OVERRIDE: 3       # "ignore/disregard/forget ... previous/above instructions"
     FW-ROLE-MARKER: 3    # [SYSTEM], <|im_start|>, "### system", line-initial "Assistant:"/"User:"

@@ -42,6 +42,20 @@ class FirewallVerdict:
     classifier_called: bool = False
 
 
+_LIST_ITEM = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|#{1,6}\s)")
+
+
+def _list_units(paragraph: str) -> list[str]:
+    """Split a paragraph into list items / headings; wrapped continuation lines stay with their item."""
+    units: list[str] = []
+    for line in paragraph.split("\n"):
+        if _LIST_ITEM.match(line) or not units:
+            units.append(line)
+        else:
+            units[-1] += " " + line
+    return units
+
+
 def _visible(normalized: str) -> str:
     return html_views(normalized)[0] if "<" in normalized else normalized
 
@@ -84,6 +98,18 @@ def _scan(text: str, fw: FirewallPolicy, tool_names: set[str], classifier=None) 
         if not s:
             continue
         score, _ = heuristics.score_sentence(s, tool_names, fw.weights)
+        units = _list_units(part) if score >= fw.t_high else [part]
+        if len(units) > 1:
+            # A flagged multi-item paragraph (a checklist, a bulleted block): drop only the offending
+            # items so the legitimate fields around an injected step survive. If no single item
+            # scores high the injection spans items, so the whole paragraph goes (previous behaviour).
+            scored = [(" ".join(u.split()), heuristics.score_sentence(" ".join(u.split()), tool_names, fw.weights)[0])
+                      for u in units]
+            if any(sc >= fw.t_high for _, sc in scored):
+                for text_u, sc in scored:
+                    if text_u:
+                        (removed if sc >= fw.t_high else kept).append(text_u)
+                continue
         if score >= fw.t_high:
             removed.append(s)
         else:
