@@ -60,6 +60,9 @@ def classify_rate_limit(error: Exception) -> tuple[str | None, float]:
     back off), or None (not a rate limit)."""
     text = str(error)
     low = text.lower()
+    if (type(error).__name__ in ("AuthenticationError", "PermissionDeniedError")
+            or "invalid_api_key" in low or "invalid api key" in low):
+        return "auth", 0.0  # a revoked/invalid key never recovers: leave it behind like a daily-capped one
     if ("rate_limit" not in low and "rate limit" not in low and "429" not in text
             and type(error).__name__ != "RateLimitError"):
         return None, 0.0
@@ -244,11 +247,11 @@ class LLMClient:
                 kind, wait = classify_rate_limit(e)
                 if kind is None:
                     raise LLMUnavailable(f"{type(e).__name__}: {e}") from e
-                if kind == "tpd":  # daily cap: abandon this key for another, no sleep
+                if kind in ("tpd", "auth"):  # daily cap or dead key: abandon it for another, no sleep
                     if ring.rotate():
                         self._bound = None
                         continue
-                    raise LLMUnavailable("all Groq API keys hit their daily token limit") from e
+                    raise LLMUnavailable("all Groq API keys hit their daily token limit or are invalid") from e
                 tpm_attempts += 1  # per-minute cap: wait, then rotate once waiting is exhausted
                 if tpm_attempts >= RATE_LIMIT_ATTEMPTS:
                     if ring.rotate():

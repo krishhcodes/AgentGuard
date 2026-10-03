@@ -84,7 +84,8 @@ def test_classify_rate_limit_tpd_vs_tpm():
     assert classify_rate_limit(Exception(TPD_429))[0] == "tpd"
     assert classify_rate_limit(Exception("429 rate_limit try again in 172.5ms"))[0] == "tpm"
     assert classify_rate_limit(Exception("1h reset per day"))[0] is None  # not a rate-limit error
-    assert classify_rate_limit(Exception("invalid api key")) == (None, 0.0)
+    assert classify_rate_limit(Exception("invalid api key")) == ("auth", 0.0)  # dead key: rotate past it
+    assert classify_rate_limit(Exception("connection reset")) == (None, 0.0)
 
 
 def test_load_groq_keys_dedupes_and_orders(monkeypatch):
@@ -139,3 +140,32 @@ def test_raises_when_all_keys_daily_capped(monkeypatch, tmp_path):
     with pytest.raises(LLMUnavailable):
         client.invoke([HumanMessage("x")])
     assert ring.idx == 1  # walked to the last key before giving up
+
+
+def test_invalid_api_key_is_classified_and_rotated_past(monkeypatch, tmp_path):
+    import agentguard.llm as llm
+
+    class AuthenticationError(Exception):
+        pass
+
+    err = AuthenticationError("Error code: 401 - {'error': {'code': 'invalid_api_key'}}")
+    assert llm.classify_rate_limit(err)[0] == "auth"
+
+    ring = llm._KeyRing(["bad", "good"])
+    monkeypatch.setattr(llm, "groq_key_ring", lambda: ring)
+
+    class PerKey:
+        def __init__(self, key):
+            self.key = key
+
+        def bind_tools(self, tools):
+            return self
+
+        def invoke(self, messages):
+            if self.key == "bad":
+                raise err
+            return AIMessage(content="ok")
+
+    monkeypatch.setattr(llm, "_build_live_model", lambda cfg, key=None: PerKey(key))
+    client = llm.LLMClient("agent", "m", [], "off", tmp_path, inner=llm._LazyLive(llm.RoleConfig(provider="groq", model="m")))
+    assert client.invoke([HumanMessage("x")]).content == "ok" and ring.idx == 1
