@@ -160,14 +160,26 @@ def _clear_run_state() -> None:
         st.session_state.pop(k, None)
 
 
-def start_run(spec, request: str, mode: str, guard_on: bool) -> None:
+def protected_config(guard_on: bool, firewall_on: bool) -> str | None:
+    if guard_on and firewall_on:
+        return "full"
+    if guard_on:
+        return "guard_only"
+    if firewall_on:
+        return "firewall_only"  # spotlight is implied by the firewall config
+    return None
+
+
+def start_run(spec, request: str, mode: str, guard_on: bool, firewall_on: bool) -> None:
     _clear_run_state()
     # Baseline is a plain run (no interrupts). Its errors are captured in the RunResult, so a
     # protected-run failure can never blank this column.
     st.session_state["baseline_result"] = run_scenario(
         spec, config="baseline", user_request=request, settings=load_settings(mode))
-    if guard_on:
-        session = RunSession(spec, config="guard_only", user_request=request, settings=load_settings(mode))
+    config = protected_config(guard_on, firewall_on)
+    st.session_state["protected_config"] = config
+    if config:
+        session = RunSession(spec, config=config, user_request=request, settings=load_settings(mode))
         status = session.start()
         st.session_state["guard_session"] = session
         st.session_state["guard_result"] = session.result() if status == RunSession.DONE else None
@@ -182,20 +194,35 @@ def render_baseline_column(result) -> None:
         render_trace(result.messages, result.status)
 
 
+def render_firewall_summary(events) -> None:
+    scans = [e for e in events if e.event == "content_scanned" and e.data.get("action") != "PASS"]
+    if not scans:
+        return
+    st.markdown("**Content Firewall**")
+    for e in scans:
+        action = e.data.get("action")
+        emoji = {"SANITIZE": "✂️", "QUARANTINE": "🚫", "FLAG": "⚑"}.get(action, "•")
+        st.markdown(f"{emoji} **{action}** · rules: {', '.join(e.rules) or '—'}")
+        st.text(f"source: {e.data.get('source', '')}")  # source is untrusted-derived -> plain text
+
+
 def render_guard_column() -> None:
-    st.subheader("🟢 Protected (Action Guard)")
+    config = st.session_state.get("protected_config")
+    st.subheader(f"🟢 Protected · {config or ''}")
     session = st.session_state.get("guard_session")
     result = st.session_state.get("guard_result")
     if session is None:
-        st.info("Enable the Action Guard in the sidebar to see the protected run.")
+        st.info("Enable the Action Guard and/or the Content Firewall in the sidebar.")
         return
     if result is None and session.pending is not None:  # paused on an ASK
         st.caption("paused · awaiting human approval")
+        render_firewall_summary(session.events)
         render_decisions(session.events)
         render_approval_card(session)
         return
-    st.caption(f"guard_only · {result.run_id} · {result.status} · {result.duration_s:.1f}s")
+    st.caption(f"{config} · {result.run_id} · {result.status} · {result.duration_s:.1f}s")
     render_verdict(result)
+    render_firewall_summary(result.events)
     render_decisions(result.events)
     render_outbox(result.sandbox, leaked_hint=True)
     with st.expander("Step trace", expanded=False):
@@ -211,6 +238,35 @@ def render_audit_tab() -> None:
         st.markdown(f"**{result.config}** · run `{result.run_id}` · {result.audit_path}")
         for event in result.events:
             st.json(event.model_dump(mode="json"), expanded=False)
+
+
+def render_inside_document_tab(spec) -> None:
+    """Raw poisoned document -> revealed hidden/decoded views -> sanitised + spotlighted text."""
+    from agentguard.firewall import scan, spotlight
+    from agentguard.policy import load_policy
+    from agentguard.text import text_views
+
+    if not spec.overlay:
+        st.info("This scenario has no injected document. Pick an attack scenario (e.g. plain-01, enc-01).")
+        return
+    policy = load_policy()
+    for path, raw in spec.overlay.items():
+        st.markdown(f"### {path}")
+        st.markdown("**1. Raw document (as delivered to a naive agent)**")
+        st.text(raw)
+        tv = text_views(raw)
+        if tv.hidden or tv.decoded:
+            st.markdown("**2. Hidden / decoded channels the firewall reveals**")
+            for v in tv.hidden + tv.decoded:
+                st.text(f"[{v.kind}] {v.snippet(300)}")
+        else:
+            st.caption("No hidden or encoded channels in this document.")
+        verdict = scan(raw, path, policy.firewall, set(policy.tools))
+        st.markdown(f"**3. Firewall verdict: {verdict.action}**  ·  rules: {', '.join(verdict.rules) or '—'}")
+        spotlighted = spotlight(verdict.sanitized_text, nonce="7f3a", source=path)
+        st.markdown("**4. Sanitised + spotlighted text the agent actually sees**")
+        st.text(spotlighted)
+        st.divider()
 
 
 def render_results_tab() -> None:
@@ -242,18 +298,22 @@ with st.sidebar:
     if spec.description:
         st.caption(spec.description)
     request = st.text_area("User request (trusted)", value=spec.user_request.strip(), height=150, key=f"req-{sid}")
-    guard_on = st.toggle("Action Guard (protected column)", value=True)
+    st.caption("Protected column layers")
+    firewall_on = st.toggle("Content Firewall (scan what it reads)", value=True)
+    guard_on = st.toggle("Action Guard (authorise what it does)", value=True)
     mode = st.radio("LLM mode", list(MODES), index=list(MODES).index(settings.llm_mode), format_func=MODES.get)
     if st.button("Run", type="primary", width='stretch'):
         with st.spinner("Running baseline and protected agents..."):
-            start_run(spec, request, mode, guard_on)
+            start_run(spec, request, mode, guard_on, firewall_on)
 
 st.title("AgentGuard")
-st.caption("Milestone M3: unprotected vs guard-protected agent, side by side, with live human approval.")
+st.caption("Unprotected vs protected agent, side by side: Content Firewall (input) + Action Guard "
+           "(output) with live human approval.")
 if mode == "replay":
     st.caption("REPLAY mode — responses come from recorded runs (offline).")
 
-live_tab, audit_tab, results_tab = st.tabs(["Live attack", "Audit log", "Evaluation results"])
+live_tab, doc_tab, audit_tab, results_tab = st.tabs(
+    ["Live attack", "Inside the document", "Audit log", "Evaluation results"])
 
 with live_tab:
     if "baseline_result" not in st.session_state:
@@ -264,6 +324,9 @@ with live_tab:
             render_baseline_column(st.session_state["baseline_result"])
         with right:
             render_guard_column()
+
+with doc_tab:
+    render_inside_document_tab(spec)
 
 with audit_tab:
     render_audit_tab()

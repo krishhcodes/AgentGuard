@@ -101,7 +101,7 @@ def test_report_markdown_has_gate_checks(settings):
 
 def test_unknown_config_rejected(settings):
     with pytest.raises(ValueError):
-        run_suite(configs=["full"], splits=["benign"], repeats=1, settings=settings,
+        run_suite(configs=["does_not_exist"], splits=["benign"], repeats=1, settings=settings,
                   scenarios=_mini_suite(), llm_factory=lambda s, c: honest_agent())
 
 

@@ -27,6 +27,15 @@ class ToolPolicy(BaseModel):
     description: str
 
 
+class FirewallPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    t_low: float = 2
+    t_high: float = 3
+    quarantine_fraction: float = 0.5
+    weights: dict[str, float] = {}
+
+
 class Policy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -36,6 +45,7 @@ class Policy(BaseModel):
     directory: dict[str, str] = {}  # alias phrase (lowercased key) -> email, M2+
     high_risk_fields: list[str] = []  # write fields escalated to ASK unless the user stated them, M2+
     secret_patterns: list[str] = []  # regexes for secret-shaped egress data, M4+
+    firewall: FirewallPolicy = FirewallPolicy()  # content-firewall thresholds/weights, M5+
 
     def is_confidential(self, path: str) -> bool:
         return any(fnmatch(path, pattern) for pattern in self.confidential_globs)

@@ -13,10 +13,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 EventType = Literal[
-    "run_started", "scope_extracted", "guard_decision", "human_decision",
+    "run_started", "scope_extracted", "content_scanned", "guard_decision", "human_decision",
     "tool_executed", "layer_error", "run_completed",
 ]
-Layer = Literal["runner", "scope", "action_guard", "human_gate", "tools"]
+Layer = Literal["runner", "scope", "firewall", "action_guard", "human_gate", "tools"]
 RunStatus = Literal["ok", "step_limit", "error"]
 Decision = Literal["ALLOW", "ASK", "BLOCK", "APPROVED", "DENIED"]
 

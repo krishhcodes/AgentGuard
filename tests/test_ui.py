@@ -66,7 +66,9 @@ def test_ui_resolves_ask_via_approve_button(tmp_path, monkeypatch, scenarios):
     monkeypatch.setenv("AGENTGUARD_LLM_MODE", "replay")
     at = AppTest.from_file(str(ROOT / "ui" / "app.py"), default_timeout=60)
     at.run()
-    at.sidebar.selectbox[0].set_value("ambig-01-the-team").run()
+    at.sidebar.selectbox[0].set_value("ambig-01-the-team")
+    at.toggle[0].set_value(False)  # Content Firewall off -> protected config is guard_only (the recorded run)
+    at.run()
     at.sidebar.button[0].click().run()
     assert not at.exception
     # The guard paused on an ASK: an approval form is shown.

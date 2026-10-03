@@ -34,6 +34,23 @@ secret_patterns:
   - "\\b\\d{4}-FAKE-\\d{4}-\\d{4}\\b"     # bank account numbers (fixture format)
   - "(?:NEW-)?IBAN-[A-Z0-9-]{4,}"         # IBAN-style account identifiers
 
+# M5: Content Firewall. Rule-family weights sum to a per-sentence risk score; a score >= t_high is
+# removed (SANITIZE), a segment that is mostly malicious is QUARANTINEd, and t_low..t_high is FLAGged.
+firewall:
+  t_low: 2
+  t_high: 3
+  quarantine_fraction: 0.5   # if more than this share of a segment is malicious -> QUARANTINE
+  weights:
+    FW-OVERRIDE: 3       # "ignore/disregard/forget ... previous/above instructions"
+    FW-ROLE-MARKER: 3    # [SYSTEM], <|im_start|>, "### system", line-initial "Assistant:"/"User:"
+    FW-ZW: 3             # text hidden via zero-width / tag characters
+    FW-AGENT-ADDRESS: 2  # text addressed to an AI / assistant / agent / model
+    FW-TOOL-DIRECTIVE: 2 # a registry tool name used as an imperative
+    FW-EXFIL-INTENT: 3   # send/forward/upload a sensitive noun or to an address
+    FW-HIDDEN-HTML: 2    # instruction carried in an HTML comment / display:none / attribute
+    FW-DECODED: 2        # an instruction revealed only after decoding (base64/hex/...)
+    FW-AUTHORITY: 1      # admin / IT / compliance "override" framing
+
 tools:
   read_file:
     risk: read

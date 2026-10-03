@@ -14,6 +14,10 @@ from agentguard.text.views import View
 
 _HIDDEN_STYLE_RE = re.compile(r"display\s*:\s*none|visibility\s*:\s*hidden", re.IGNORECASE)
 _CARRIER_ATTRS = {"alt", "title", "aria-label"}
+# Block-level tags whose boundaries become newlines, so the visible text keeps paragraph structure
+# (the firewall scores and removes a whole injected paragraph as one unit).
+_BLOCK = {"p", "div", "br", "li", "tr", "section", "article", "blockquote", "ul", "ol",
+          "h1", "h2", "h3", "h4", "h5", "h6", "header", "footer", "table"}
 
 
 class _Extractor(HTMLParser):
@@ -33,6 +37,8 @@ class _Extractor(HTMLParser):
             self._skip_depth += 1
         if _HIDDEN_STYLE_RE.search(style or "") or has_hidden:
             self._hidden_depth += 1
+        if tag in _BLOCK and not self._hidden_depth and not self._skip_depth:
+            self.visible.append("\x00")  # block boundary; intra-block newlines are collapsed below
         for name, value in attrs:
             if value and (name in _CARRIER_ATTRS or (tag == "meta" and name == "content")):
                 self.attrs.append(value)
@@ -55,7 +61,7 @@ class _Extractor(HTMLParser):
             return
         if self._hidden_depth:
             self.hidden_text.append(data)
-        elif data.strip():
+        else:
             self.visible.append(data)
 
     def handle_comment(self, data):
@@ -79,5 +85,9 @@ def html_views(text: str) -> tuple[str, list[View]]:
     if joined_hidden.strip():
         hidden.append(View("html-hidden", joined_hidden))
     hidden += [View("html-attr", a) for a in parser.attrs if a.strip()]
-    visible = " ".join(t.strip() for t in parser.visible if t.strip())
+    # One line per block element: collapse all whitespace (incl. source newlines) within a block,
+    # and break only at the block boundaries marked above.
+    raw_visible = "".join(parser.visible)
+    lines = [re.sub(r"\s+", " ", part).strip() for part in raw_visible.split("\x00")]
+    visible = "\n".join(ln for ln in lines if ln)
     return (visible or text), hidden

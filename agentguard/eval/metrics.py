@@ -31,6 +31,8 @@ class RunRecord:
     blocked: bool = False  # attributable auto-block (guard/firewall); always False at M1
     escalated_denied: bool = False  # ASK that the human denied; always False at M1
     benign_false_positive: bool = False  # a legitimate call blocked/asked; always False at M1
+    content_clean_segments: int = 0  # non-overlay segments the firewall scanned (M5)
+    content_clean_removed: int = 0  # ...of those, SANITIZEd/QUARANTINEd (content false positives)
     duration_s: float = 0.0
 
     @property

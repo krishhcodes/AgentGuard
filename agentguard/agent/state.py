@@ -33,6 +33,10 @@ CONFIG_FLAGS: dict[str, GuardFlags] = {
     "guard_only": {"firewall": False, "classifier": False, "spotlight": False, "guard": True},
     # compromised_agent = guard on, driven by a ScriptedChatModel that always emits the attack's calls.
     "compromised_agent": {"firewall": False, "classifier": False, "spotlight": False, "guard": True},
+    # M5 configs. The classifier (F3) is M6, so firewall here means the deterministic stages only.
+    "firewall_only": {"firewall": True, "classifier": False, "spotlight": True, "guard": False},
+    "full": {"firewall": True, "classifier": False, "spotlight": True, "guard": True},
+    "warning_prompt_only": {"firewall": False, "classifier": False, "spotlight": True, "guard": False},
 }
 
 
@@ -86,5 +90,6 @@ class Runtime:
     retriever: Retriever
     llm: Any  # agent LLMClient-like: .invoke(messages) -> AIMessage (U* output)
     audit: AuditLogger
-    policy: Any = None  # Policy (T0); used by extract_scope and action_guard
+    policy: Any = None  # Policy (T0); used by extract_scope, action_guard and the firewall
     scope_llm: Any = None  # scope-role LLMClient-like; None -> extractor uses its fallback
+    nonce: str = ""  # per-run spotlight nonce (M5)

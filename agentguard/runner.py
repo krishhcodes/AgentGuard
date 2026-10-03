@@ -23,6 +23,7 @@ from agentguard.agent.state import Runtime, config_flags
 from agentguard.audit import AuditEvent, AuditLogger
 from agentguard.audit.events import truncate
 from agentguard.config import Settings, load_settings
+from agentguard.firewall import make_nonce
 from agentguard.eval.checkers import CheckContext, TaskVerdict, check_task
 from agentguard.eval.oracle import AttackVerdict, OracleContext, judge_attack
 from agentguard.eval.suites import ScenarioSpec
@@ -116,7 +117,7 @@ def _setup_run(
     rt = Runtime(
         run_id=run_id, config_name=config, scenario_id=spec.id, settings=settings,
         sandbox=sandbox, registry=registry, retriever=Retriever(sandbox.corpus_documents()),
-        llm=llm, audit=audit, policy=policy, scope_llm=scope_llm,
+        llm=llm, audit=audit, policy=policy, scope_llm=scope_llm, nonce=make_nonce(),
     )
     audit.emit(AuditEvent(run_id=run_id, config=config, scenario_id=spec.id, layer="runner",
                           event="run_started", data={"user_request": truncate(request, 500),

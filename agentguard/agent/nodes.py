@@ -19,6 +19,8 @@ from agentguard.agent.prompts import BASELINE_SYSTEM_PROMPT
 from agentguard.agent.state import AgentState, RawSegment, Runtime
 from agentguard.audit import AuditEvent
 from agentguard.audit.events import preview_args, truncate
+from agentguard import firewall as fw
+from agentguard.firewall import SPOTLIGHT_CLAUSE
 from agentguard.guard import rules as guard_rules
 from agentguard.guard.taint import TaintLedger
 from agentguard.llm import LLMUnavailable
@@ -80,22 +82,58 @@ def retrieve(state: AgentState, config: RunnableConfig) -> dict:
     return {"messages": [call], "pending_untrusted": segments}
 
 
-def _render_group(segments: list[RawSegment]) -> str:
+def _render_group(segments: list[RawSegment], texts: list[str], spotlighted: bool) -> str:
+    if spotlighted:  # each chunk already carries its own ⟦DATA source=...⟧ label
+        return "\n\n".join(texts)
     if segments[0]["channel"] == "rag":
-        return "\n\n".join(f"--- source: {s['source']} ---\n{s['text']}" for s in segments)
-    return segments[0]["text"]
+        return "\n\n".join(f"--- source: {s['source']} ---\n{t}" for s, t in zip(segments, texts))
+    return texts[0]
+
+
+def _firewall_segment(seg: RawSegment, rt: Runtime) -> tuple[str, bool, float]:
+    """Scan one segment, log content_scanned, return (text_for_agent, flagged, latency_ms)."""
+    verdict = fw.scan(seg["text"], seg["source"], rt.policy.firewall, set(rt.policy.tools))
+    rt.audit.emit(AuditEvent(
+        run_id=rt.run_id, config=rt.config_name, scenario_id=rt.scenario_id, layer="firewall",
+        event="content_scanned", tool=seg["tool_name"], rules=verdict.rules,
+        reason=f"{verdict.action} {seg['source']}", evidence=verdict.hits,
+        data={"action": verdict.action, "risk_score": verdict.risk_score, "source": seg["source"],
+              "removed": len(verdict.removed), "anomalies": verdict.anomalies},
+        latency_ms={"firewall": verdict.latency_ms},
+    ))
+    return verdict.sanitized_text, verdict.action == fw.FLAG, verdict.latency_ms
 
 
 def ingest_untrusted(state: AgentState, config: RunnableConfig) -> dict:
-    """Raw passthrough into the context (the M0 vulnerability is preserved). When the guard is on,
-    every untrusted segment is also recorded in the Taint Ledger for provenance and confidential-flow
-    tracking (M4). No scanning happens here; the Content Firewall is M5."""
-    groups: dict[str, list[RawSegment]] = {}
-    for seg in state["pending_untrusted"]:
-        groups.setdefault(seg["tool_call_id"], []).append(seg)
+    """Bring untrusted content into the context. Baseline passes it raw (the M0 vulnerability). When
+    `guard` is on it is recorded in the Taint Ledger (M4, provenance uses the ORIGINAL text). When
+    `firewall` is on each segment is scanned and sanitised/quarantined before the agent sees it, and
+    when `spotlight` is on the result is wrapped in per-run DATA delimiters (M5)."""
+    rt = _rt(config)
+    flags = state["flags"]
+    pending = state["pending_untrusted"]
+
+    processed: list[str] = []
+    fw_times: list[float] = []
+    for seg in pending:
+        text = seg["text"]
+        flagged = False
+        if flags["firewall"]:
+            text, flagged, ms = _firewall_segment(seg, rt)
+            fw_times.append(ms)
+        if flags["spotlight"]:
+            text = fw.spotlight(text, nonce=rt.nonce, source=seg["source"], flagged=flagged)
+        processed.append(text)
+
+    groups: dict[str, tuple[list[RawSegment], list[str]]] = {}
+    for seg, text in zip(pending, processed):
+        g = groups.setdefault(seg["tool_call_id"], ([], []))
+        g[0].append(seg)
+        g[1].append(text)
     messages = [
-        ToolMessage(content=_render_group(segs), tool_call_id=call_id, name=segs[0]["tool_name"])
-        for call_id, segs in groups.items()
+        ToolMessage(content=_render_group(segs, texts, flags["spotlight"]), tool_call_id=call_id,
+                    name=segs[0]["tool_name"])
+        for call_id, (segs, texts) in groups.items()
     ]
     # Retrieval with zero hits still needs a ToolMessage answering the synthetic call.
     answered = set(groups)
@@ -104,13 +142,16 @@ def ingest_untrusted(state: AgentState, config: RunnableConfig) -> dict:
         for tc in last_ai.tool_calls:
             if tc["id"] not in answered and tc["name"] == RETRIEVE_TOOL:
                 messages.append(ToolMessage(content="No relevant documents found.", tool_call_id=tc["id"], name=RETRIEVE_TOOL))
+
     out: dict = {"messages": messages, "pending_untrusted": []}
-    if state["flags"]["guard"]:
+    if flags["guard"]:
         ledger = state.get("ledger") or TaintLedger()
-        for seg in state["pending_untrusted"]:
-            ledger.record_segment(text=seg["text"], source=seg["source"],
+        for seg in pending:  # provenance/flow use the ORIGINAL text, so the guard still works if the
+            ledger.record_segment(text=seg["text"], source=seg["source"],  # firewall misses an injection
                                   channel=seg["channel"], confidential=seg["confidential"])
         out["ledger"] = ledger
+    if fw_times:
+        out["timings"] = {"firewall": fw_times}
     return out
 
 
@@ -121,7 +162,10 @@ def _is_blank(message: AIMessage) -> bool:
 def agent(state: AgentState, config: RunnableConfig) -> dict:
     rt = _rt(config)
     try:
-        prompt = [SystemMessage(BASELINE_SYSTEM_PROMPT), *state["messages"]]
+        system = BASELINE_SYSTEM_PROMPT
+        if state["flags"]["spotlight"]:  # the spotlighting clause is owned by the firewall (M5)
+            system = f"{BASELINE_SYSTEM_PROMPT}\n\n{SPOTLIGHT_CLAUSE}"
+        prompt = [SystemMessage(system), *state["messages"]]
         response = rt.llm.invoke(prompt)
         if _is_blank(response):  # occasional empty generation: retry once
             response = rt.llm.invoke(prompt)
