@@ -152,8 +152,7 @@ def _freeze_ok(args) -> bool:
 
     dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     if dirty:
-        print("freeze refused: the git tree is dirty. Commit first.
-" + dirty)
+        print("freeze refused: the git tree is dirty. Commit first.\n" + dirty)
         return False
     problems = verify_manifest()
     if problems:
@@ -163,8 +162,7 @@ def _freeze_ok(args) -> bool:
     log = ROOT / "results" / "UNSEEN_RUNS.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     with open(log, "a", encoding="utf-8") as f:
-        f.write(f"{datetime.now().isoformat(timespec='seconds')} commit={commit} configs={args.configs} splits={args.splits}
-")
+        f.write(f"{datetime.now().isoformat(timespec='seconds')} commit={commit} configs={args.configs} splits={args.splits}\n")
     print(f"freeze ok at {commit[:10]} (logged to {log})")
     return True
 
