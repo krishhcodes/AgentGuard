@@ -33,6 +33,7 @@ class RunRecord:
     benign_false_positive: bool = False  # a legitimate call blocked/asked; always False at M1
     content_clean_segments: int = 0  # non-overlay segments the firewall scanned (M5)
     content_clean_removed: int = 0  # ...of those, SANITIZEd/QUARANTINEd (content false positives)
+    caught_by: str = ""  # which layer(s) stopped an attack: firewall | guard | firewall+guard | ""
     interventions: int = 0  # guard BLOCK/ASK + firewall SANITIZE/QUARANTINE events in the run (M6)
     interventions_explained: int = 0  # ...of those, carrying a reason and rule/evidence (D4)
     lat_scope_ms: float = 0.0  # per-run added latency by layer (sum over the run's invocations); scope is

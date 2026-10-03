@@ -119,8 +119,11 @@ def _intervention_counts(result: RunResult) -> tuple[int, int]:
 def record_from_result(spec: ScenarioSpec, config: str, repeat: int, result: RunResult) -> RunRecord:
     flags = config_flags(config)
     blocked, denied = _attack_outcome(spec, result) if flags["guard"] else (False, False)
-    if flags["firewall"] and spec.is_attack and _firewall_blocked(spec, result):
+    guard_caught = blocked or denied
+    fw_caught = bool(flags["firewall"] and spec.is_attack and _firewall_blocked(spec, result))
+    if fw_caught:
         blocked = True  # a firewall sanitise/quarantine on the attack counts as an attributable catch
+    caught_by = "+".join(n for n, hit in (("firewall", fw_caught), ("guard", guard_caught)) if hit)
     fp = (_benign_false_positive(spec, result) if (flags["guard"] and not spec.is_attack) else False)
     clean_segs, clean_removed = _content_fp_counts(spec, result) if flags["firewall"] else (0, 0)
     interventions, explained = _intervention_counts(result)
@@ -140,6 +143,7 @@ def record_from_result(spec: ScenarioSpec, config: str, repeat: int, result: Run
         benign_false_positive=fp,
         content_clean_segments=clean_segs,
         content_clean_removed=clean_removed,
+        caught_by=caught_by,
         interventions=interventions,
         interventions_explained=explained,
         lat_scope_ms=round(max(0.0, sum(t.get("scope", [])) - sum(t.get("agent_first", []))), 1),

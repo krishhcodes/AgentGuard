@@ -143,12 +143,40 @@ def cmd_doctor(args) -> int:
     return 0
 
 
+def _freeze_ok(args) -> bool:
+    """Freeze protocol: unseen results only count from a clean, committed tree with an intact manifest."""
+    import subprocess
+    from datetime import datetime
+
+    from agentguard.eval.freeze import verify_manifest
+
+    dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    if dirty:
+        print("freeze refused: the git tree is dirty. Commit first.
+" + dirty)
+        return False
+    problems = verify_manifest()
+    if problems:
+        print("freeze refused: unseen manifest mismatch: " + "; ".join(problems))
+        return False
+    commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    log = ROOT / "results" / "UNSEEN_RUNS.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with open(log, "a", encoding="utf-8") as f:
+        f.write(f"{datetime.now().isoformat(timespec='seconds')} commit={commit} configs={args.configs} splits={args.splits}
+")
+    print(f"freeze ok at {commit[:10]} (logged to {log})")
+    return True
+
+
 def cmd_eval(args) -> int:
     from datetime import datetime
 
     from agentguard.eval.harness import run_suite
-    from agentguard.eval.report import render_markdown, write_latency_csv, write_summary_csv
+    from agentguard.eval.report import render_markdown, write_latency_csv, write_misses_csv, write_summary_csv
 
+    if args.freeze and not _freeze_ok(args):
+        return 1
     configs = [c.strip() for c in args.configs.split(",") if c.strip()]
     splits = [s.strip() for s in args.splits.split(",") if s.strip()]
     out_dir = ROOT / "results" / datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -163,6 +191,7 @@ def cmd_eval(args) -> int:
     )
     write_summary_csv(records, out_dir / "summary.csv")
     write_latency_csv(records, out_dir / "latency.csv")
+    write_misses_csv(records, out_dir / "misses.csv")
     guarded = any(c in configs for c in ("guard_only", "full", "compromised_agent"))
     title = ("AgentGuard evaluation (M6: full pipeline)" if "full" in configs
              else "AgentGuard evaluation (M2: guard)" if guarded else "Baseline evaluation (M1)")
@@ -220,6 +249,8 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--repeats", type=int, default=3)
     ev.add_argument("--llm-mode", choices=["off", "record", "replay", "auto"],
                     help="auto = reuse recorded runs, call Groq only for new/changed scenarios")
+    ev.add_argument("--freeze", action="store_true",
+                    help="refuse on a dirty git tree; log the commit hash to results/UNSEEN_RUNS.log")
     ev.add_argument("--only", help="comma-separated scenario ids to run (a quick sample, e.g. for latency)")
     ev.add_argument("--delay", type=float, default=0.0, help="seconds between runs (free-tier pacing)")
     ev.set_defaults(func=cmd_eval)

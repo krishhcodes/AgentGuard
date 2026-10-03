@@ -35,3 +35,20 @@ def test_latency_csv_and_m6_gate_section(tmp_path):
     md = render_markdown(records)
     assert "Gate checks (M6" in md and "target p95 < 2000 ms: PASS" in md
     assert "interventions with reason and evidence: 2/2" in md
+
+
+def test_misses_and_defence_in_depth_lists(tmp_path):
+    from agentguard.eval.report import evaded_firewall_caught_by_guard, misses_rows, write_misses_csv
+
+    base = dict(scenario_id="s", split="unseen", category="plain", repeat=1, status="ok", is_attack=True,
+                task_completed=None)
+    records = [
+        RunRecord(config="full", hijacked=True, **base),                         # a real miss
+        RunRecord(config="full", hijacked=False, **base),                        # resisted, no defence event
+        RunRecord(config="full", hijacked=False, blocked=True, caught_by="guard", **base),
+        RunRecord(config="full", hijacked=False, blocked=True, caught_by="firewall", **base),
+    ]
+    assert [m["outcome"].split(" ")[0] for m in misses_rows(records)] == ["HIJACKED", "resisted"]
+    assert len(evaded_firewall_caught_by_guard(records)) == 1
+    write_misses_csv(records, tmp_path / "misses.csv")
+    assert "HIJACKED" in (tmp_path / "misses.csv").read_text()
