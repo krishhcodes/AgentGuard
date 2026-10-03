@@ -1,0 +1,18 @@
+config,layer,n_runs,p50_ms,p95_ms
+compromised_agent,scope,4,518.1,2294.7
+compromised_agent,guard,4,0.7,1.3
+compromised_agent,"scope (raw, overlapped with agent turn 1; not in TOTAL)",4,518.1,2294.7
+compromised_agent,TOTAL,4,519.4,2295.4
+firewall_only,firewall,4,16.4,34.8
+firewall_only,TOTAL,4,16.4,34.8
+full,firewall,4,16.4,24.5
+full,guard,4,0,3.4
+full,"scope (raw, overlapped with agent turn 1; not in TOTAL)",4,518.1,2294.7
+full,TOTAL,4,16.4,27.9
+guard_only,scope,4,516.0,2292.4
+guard_only,guard,4,0,0.1
+guard_only,"scope (raw, overlapped with agent turn 1; not in TOTAL)",4,518.1,2294.7
+guard_only,TOTAL,4,516.0,2292.4
+regex_only,firewall,4,17.9,34.9
+regex_only,TOTAL,4,17.9,34.9
+warning_prompt_only,TOTAL,4,0.0,0.0

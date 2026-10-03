@@ -26,6 +26,9 @@ PS3 gates on dev, all **PASS**: catch 94% (>=85%), poisoned-task completion 94% 
 p50 22 ms / **p95 655 ms (<2 s)**. Honest caveats: the unseen set is only 4 attacks (wide CIs), and the baseline
 hijack rate is 62%, below the 70% target; see [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
+**Unseen set (4 held-out attacks, hash-locked; [docs/m7-unseen/](docs/m7-unseen/)):** `full` 0% ASR (baseline 25%), 4/4 caught, 75% completion of attacked tasks (one utility miss, documented with its proposed fix). A first run
+exposed a firewall defect (25% completion); it was fixed once and **both runs are disclosed**.
+
 M4 (data-flow layer) in short: baseline dev ASR **62%** (10/16) -> guard_only **0%**; `compromised_agent`
 (guard alone vs a fully hijacked agent) catch **100%** incl. multi-step ([docs/m4-ledger/](docs/m4-ledger/)).
 
