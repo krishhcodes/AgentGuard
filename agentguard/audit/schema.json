@@ -1,0 +1,132 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "ts": {
+      "title": "Ts",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "config": {
+      "title": "Config",
+      "type": "string"
+    },
+    "scenario_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scenario Id"
+    },
+    "layer": {
+      "enum": [
+        "runner",
+        "tools"
+      ],
+      "title": "Layer",
+      "type": "string"
+    },
+    "event": {
+      "enum": [
+        "run_started",
+        "tool_executed",
+        "run_completed"
+      ],
+      "title": "Event",
+      "type": "string"
+    },
+    "tool": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tool"
+    },
+    "args": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Args"
+    },
+    "result_preview": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Result Preview"
+    },
+    "status": {
+      "anyOf": [
+        {
+          "enum": [
+            "ok",
+            "step_limit",
+            "error"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Status"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "data": {
+      "additionalProperties": true,
+      "title": "Data",
+      "type": "object"
+    },
+    "latency_ms": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Latency Ms",
+      "type": "object"
+    }
+  },
+  "required": [
+    "run_id",
+    "config",
+    "layer",
+    "event"
+  ],
+  "title": "AuditEvent",
+  "type": "object"
+}

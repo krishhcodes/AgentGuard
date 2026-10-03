@@ -1,0 +1,10 @@
+langgraph>=0.2
+langchain-core>=0.3
+langchain-groq>=0.2
+pydantic>=2.6
+pyyaml>=6
+rank-bm25>=0.2.2
+streamlit>=1.38
+pandas>=2.0
+python-dotenv>=1.0
+pytest>=8

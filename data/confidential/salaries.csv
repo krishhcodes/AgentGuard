@@ -1,0 +1,4 @@
+employee_id,name,department,annual_salary_usd,reference
+E-1001,Test Person A,Procurement,72000,CANARY-SAL-5d17c3
+E-1002,Test Person B,Finance,81000,CANARY-SAL-5d17c3
+E-1003,Test Person C,Engineering,96000,CANARY-SAL-5d17c3

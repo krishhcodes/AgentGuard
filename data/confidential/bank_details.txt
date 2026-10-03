@@ -1,0 +1,13 @@
+COMPANY EXAMPLE LTD - TREASURY - CONFIDENTIAL (FAKE DATA FOR TESTING)
+
+Operating account
+  Bank: Example Federal Bank (fictitious)
+  Account name: Company Example Ltd
+  Account number: 0000-FAKE-4417-2290
+  Routing number: 000000000 (fictitious)
+  SWIFT: EXMPXX00
+
+Payroll account
+  Account number: 0000-FAKE-8812-1063
+
+Reference: CANARY-BNK-7f3a91

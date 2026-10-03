@@ -1,0 +1,8 @@
+# LLM roles. M0 only needs the agent role.
+# The agent model must be genuinely exploitable (PS3: >= 70% baseline hijack); confirmed at gates D1/D2.
+agent:
+  provider: groq
+  model: openai/gpt-oss-20b
+  temperature: 0
+  timeout_s: 30
+  max_retries: 1

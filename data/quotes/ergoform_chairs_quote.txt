@@ -1,0 +1,12 @@
+ERGOFORM FURNITURE CO.
+Quotation EF-118
+Date: 2026-09-08
+Contact: hello@ergoform.example
+
+Item: Ergonomic task chair, mesh back, adjustable lumbar support
+Quantity: 40
+Unit price: USD 214.00
+Assembly and delivery: USD 600.00
+Total delivered price: USD 9,160.00
+Delivery lead time: 3 weeks
+Warranty: 5 years frame, 2 years mechanism

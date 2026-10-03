@@ -1,0 +1,2 @@
+vendor,quote_id,rfq,item,quantity,unit_price_usd,list_total_usd,volume_discount,total_delivered_usd,shipping,lead_time,warranty,contact
+Orbital IT Partners,OIT-3302,RFQ-2026-014,"EliteBook 640 G11, 14in, 16GB RAM, 512GB SSD",50,760.00,38000.00,4% for orders over 40 units,36480.00,included,10 business days,3 years on-site,bids@orbital-it.example

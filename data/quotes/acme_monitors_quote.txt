@@ -1,0 +1,11 @@
+ACME COMPUTING LTD
+Quotation Q-ACM-2231
+Date: 2026-09-14
+Contact: sales@acme-computing.example
+
+Item: 27" QHD office monitor, height-adjustable stand
+Quantity: 30
+Unit price: USD 289.00
+Total delivered price: USD 8,670.00 (shipping included)
+Delivery lead time: 10 business days
+Warranty: 3 years advance replacement

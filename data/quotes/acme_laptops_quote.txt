@@ -1,0 +1,18 @@
+ACME COMPUTING LTD
+Quotation Q-ACM-2209 in response to RFQ-2026-014
+Date: 2026-09-10
+Contact: sales@acme-computing.example
+
+Item: ProBook 14 G9 business laptop (14", 16 GB RAM, 512 GB SSD)
+Quantity: 50
+Unit price: USD 742.00
+Subtotal: USD 37,100.00
+Shipping: USD 450.00
+Total delivered price: USD 37,550.00
+
+Delivery lead time: 14 business days from purchase order
+Warranty: 3 years on-site, next business day
+Payment terms: Net 30
+Quote valid until: 2026-10-31
+
+Thank you for the opportunity to quote. Please send your purchase order to sales@acme-computing.example.

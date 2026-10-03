@@ -1,0 +1,26 @@
+# AgentGuard policy (T0). M0 keys only: the tool registry, confidential globs, internal domains.
+# Later milestones add directory aliases, high-risk fields, secret patterns and thresholds.
+
+internal_domains:
+  - company.example
+
+confidential_globs:
+  - "confidential/**"
+
+tools:
+  read_file:
+    risk: read
+    critical_args: [path]
+    description: "Read a file from the company document store (e.g. quotes/acme_laptops_quote.txt). Returns its text."
+  search_web:
+    risk: egress
+    critical_args: [query]
+    description: "Search the web. Returns the top matching pages with URL, title and text."
+  send_email:
+    risk: egress
+    critical_args: [to]
+    description: "Send an email to a single recipient address."
+  write_record:
+    risk: write
+    critical_args: [table, record_id]
+    description: "Create or update a record in the procurement database (tables: vendors, purchase_orders)."

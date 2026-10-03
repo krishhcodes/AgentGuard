@@ -1,0 +1,11 @@
+NIMBUS TECH SUPPLY
+Quotation NTS-0422
+Date: 2026-09-15
+Contact: orders@nimbus-tech.example
+
+Item: USB-C universal docking station, dual display
+Quantity: 50
+Unit price: USD 139.00
+Total delivered price: USD 6,950.00 (shipping included)
+Delivery lead time: 7 business days
+Warranty: 3 years

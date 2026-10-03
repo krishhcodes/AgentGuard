@@ -1,0 +1,10 @@
+PRINTHAUS SERVICES
+Quotation PH-9031
+Date: 2026-09-05
+Contact: jobs@printhaus.example
+
+Item: Annual report printing, A4, 64 pages, full colour, perfect bound
+Quantity: 500 copies
+Unit price: USD 7.80
+Total: USD 3,900.00
+Turnaround: 8 business days after proof approval
