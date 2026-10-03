@@ -121,7 +121,8 @@ def ingest_untrusted(state: AgentState, config: RunnableConfig) -> dict:
     for seg in pending:
         text = seg["text"]
         flagged = False
-        if flags["firewall"]:
+        # Guard refusal notices are system-generated (trusted), not retrieved content: never firewall them.
+        if flags["firewall"] and seg["source"] != "guard":
             text, flagged, ms, clf_ms = _firewall_segment(seg, rt, flags["classifier"])
             fw_times.append(ms)
             if flags["classifier"]:

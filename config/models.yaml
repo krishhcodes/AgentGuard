@@ -24,3 +24,4 @@ classifier:
   temperature: 0
   timeout_s: 10
   max_retries: 0
+  reasoning_effort: low

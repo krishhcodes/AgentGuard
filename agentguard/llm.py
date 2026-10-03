@@ -140,6 +140,7 @@ class RoleConfig:
     temperature: float = 0.0
     timeout_s: float = 30.0
     max_retries: int = 1
+    reasoning_effort: str | None = None  # gpt-oss: low/medium/high; low is much faster for classification
 
 
 def load_role_config(role: str, path: Path | None = None) -> RoleConfig:
@@ -181,7 +182,9 @@ def _build_live_model(cfg: RoleConfig, api_key: str | None = None):
         os.environ["GROQ_API_KEY"] = key  # the groq sdk and ChatGroq read this at construction
         from langchain_groq import ChatGroq
 
-        return ChatGroq(model=cfg.model, temperature=cfg.temperature, timeout=cfg.timeout_s, max_retries=cfg.max_retries)
+        extra = {"reasoning_effort": cfg.reasoning_effort} if cfg.reasoning_effort else {}
+        return ChatGroq(model=cfg.model, temperature=cfg.temperature, timeout=cfg.timeout_s,
+                        max_retries=cfg.max_retries, **extra)
     raise LLMUnavailable(f"unsupported provider {cfg.provider!r}")
 
 
@@ -211,6 +214,15 @@ class LLMClient:
     def from_config(cls, role: str, tools: Sequence[dict], mode: str, cache_dir: Path) -> LLMClient:
         cfg = load_role_config(role)
         return cls(role, cfg.model, tools, mode, cache_dir, inner=_LazyLive(cfg))
+
+    def warm(self) -> None:
+        """Build the provider client (imports, SDK setup) outside the measured path. No network call."""
+        if self.mode == "replay" or not isinstance(self._inner, _LazyLive):
+            return
+        try:
+            self._bind(self._inner, groq_key_ring())
+        except Exception:  # warming is best-effort; a real failure resurfaces on the first invoke
+            self._bound = None
 
     def _cache_path(self, key: str) -> Path:
         return self.cache_dir / key[:2] / f"{key}.json"

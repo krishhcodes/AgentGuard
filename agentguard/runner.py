@@ -114,10 +114,14 @@ def _setup_run(
         llm = _build_agent_llm(spec, config, settings, registry)
     if scope_llm is None and flags["guard"]:
         scope_llm = LLMClient.from_config("scope", [], settings.llm_mode, settings.cache_dir)
+        scope_llm.warm()
     classifier = None
     if flags["classifier"]:
-        classifier = Classifier(classifier_llm or LLMClient.from_config(
-            "classifier", [], settings.llm_mode, settings.cache_dir))
+        classifier_llm = classifier_llm or LLMClient.from_config(
+            "classifier", [], settings.llm_mode, settings.cache_dir)
+        if hasattr(classifier_llm, "warm"):
+            classifier_llm.warm()
+        classifier = Classifier(classifier_llm)
     audit = AuditLogger(settings.runs_dir / run_id / "audit.jsonl")
     rt = Runtime(
         run_id=run_id, config_name=config, scenario_id=spec.id, settings=settings,
