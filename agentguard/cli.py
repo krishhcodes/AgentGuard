@@ -147,7 +147,7 @@ def cmd_eval(args) -> int:
     from datetime import datetime
 
     from agentguard.eval.harness import run_suite
-    from agentguard.eval.report import render_markdown, write_summary_csv
+    from agentguard.eval.report import render_markdown, write_latency_csv, write_summary_csv
 
     configs = [c.strip() for c in args.configs.split(",") if c.strip()]
     splits = [s.strip() for s in args.splits.split(",") if s.strip()]
@@ -161,8 +161,10 @@ def cmd_eval(args) -> int:
         progress=lambda line: print(line, flush=True),
     )
     write_summary_csv(records, out_dir / "summary.csv")
+    write_latency_csv(records, out_dir / "latency.csv")
     guarded = any(c in configs for c in ("guard_only", "full", "compromised_agent"))
-    title = "AgentGuard evaluation (M2: guard)" if guarded else "Baseline evaluation (M1)"
+    title = ("AgentGuard evaluation (M6: full pipeline)" if "full" in configs
+             else "AgentGuard evaluation (M2: guard)" if guarded else "Baseline evaluation (M1)")
     markdown = render_markdown(records, title=title)
     (out_dir / "RESULTS.md").write_text(markdown, encoding="utf-8")
     print("\n" + markdown)

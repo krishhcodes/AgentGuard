@@ -202,6 +202,7 @@ class LLMClient:
         self._inner = inner  # a chat model, or anything with .invoke(messages) -> AIMessage
         self._bound = None
         self._sleep = time.sleep
+        self.last_latency_ms: float = 0.0  # provider latency of the last call; replays report the recorded one
 
     @classmethod
     def from_config(cls, role: str, tools: Sequence[dict], mode: str, cache_dir: Path) -> LLMClient:
@@ -226,7 +227,9 @@ class LLMClient:
         tpm_attempts = 0
         while True:
             try:
+                t0 = time.perf_counter()
                 result = self._bind(lazy, ring).invoke(list(messages))
+                self.last_latency_ms = (time.perf_counter() - t0) * 1000  # excludes rate-limit backoff
                 break
             except LLMUnavailable:
                 raise
@@ -264,6 +267,7 @@ class LLMClient:
         # replay and auto both reuse a recorded response when present (free, offline).
         if self.mode in ("replay", "auto") and path.exists():
             data = json.loads(path.read_text(encoding="utf-8"))
+            self.last_latency_ms = float(data.get("latency_ms", 0.0))
             return messages_from_dict([data["response"]])[0]
         if self.mode == "replay":
             raise CacheMiss(f"no recorded {self.role} response for this request (key {key[:12]})")
@@ -271,7 +275,8 @@ class LLMClient:
         if self.mode in ("record", "auto"):  # auto records the live calls it had to make
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(
-                json.dumps({"role": self.role, "model": self.model_name, "response": message_to_dict(result)}),
+                json.dumps({"role": self.role, "model": self.model_name, "response": message_to_dict(result),
+                            "latency_ms": round(self.last_latency_ms, 1)}),
                 encoding="utf-8",
             )
         return result

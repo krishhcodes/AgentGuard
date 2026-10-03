@@ -174,4 +174,6 @@ def extract_scope(user_request: str, policy: Policy, llm, *, scope_id: str, mode
     except (LLMUnavailable, ValueError, json.JSONDecodeError):
         fallback_used = True  # read-only defaults + egress/write -> ASK (fail soft for reads, P6)
     latency_ms = (time.perf_counter() - started) * 1000
+    if not fallback_used:  # a replayed call is instant; report the recorded provider latency instead
+        latency_ms = max(latency_ms, float(getattr(llm, "last_latency_ms", 0.0) or 0.0))
     return _validate(user_request, pre, proposal, policy, scope_id, model_name, latency_ms, fallback_used)

@@ -33,9 +33,10 @@ CONFIG_FLAGS: dict[str, GuardFlags] = {
     "guard_only": {"firewall": False, "classifier": False, "spotlight": False, "guard": True},
     # compromised_agent = guard on, driven by a ScriptedChatModel that always emits the attack's calls.
     "compromised_agent": {"firewall": False, "classifier": False, "spotlight": False, "guard": True},
-    # M5 configs. The classifier (F3) is M6, so firewall here means the deterministic stages only.
-    "firewall_only": {"firewall": True, "classifier": False, "spotlight": True, "guard": False},
-    "full": {"firewall": True, "classifier": False, "spotlight": True, "guard": True},
+    # M5/M6 configs. regex_only = the deterministic firewall stages (F0-F2); the others add the F3 classifier.
+    "regex_only": {"firewall": True, "classifier": False, "spotlight": False, "guard": False},
+    "firewall_only": {"firewall": True, "classifier": True, "spotlight": True, "guard": False},
+    "full": {"firewall": True, "classifier": True, "spotlight": True, "guard": True},
     "warning_prompt_only": {"firewall": False, "classifier": False, "spotlight": True, "guard": False},
 }
 
@@ -93,3 +94,4 @@ class Runtime:
     policy: Any = None  # Policy (T0); used by extract_scope, action_guard and the firewall
     scope_llm: Any = None  # scope-role LLMClient-like; None -> extractor uses its fallback
     nonce: str = ""  # per-run spotlight nonce (M5)
+    classifier: Any = None  # firewall F3 Classifier (per-run call budget), M6

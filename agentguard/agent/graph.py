@@ -15,7 +15,8 @@ from langgraph.graph import END, START, StateGraph
 from agentguard.agent import nodes
 from agentguard.agent.state import AgentState, config_flags
 
-CONFIGS = ("baseline", "guard_only", "compromised_agent", "firewall_only", "full", "warning_prompt_only")
+CONFIGS = ("baseline", "guard_only", "compromised_agent", "regex_only", "firewall_only", "full",
+           "warning_prompt_only")
 
 # The checkpointed state holds our pydantic Scope / GuardDecision objects; register them so the
 # checkpointer serialises them explicitly instead of via the deprecated fallback.

@@ -90,18 +90,20 @@ def _render_group(segments: list[RawSegment], texts: list[str], spotlighted: boo
     return texts[0]
 
 
-def _firewall_segment(seg: RawSegment, rt: Runtime) -> tuple[str, bool, float]:
+def _firewall_segment(seg: RawSegment, rt: Runtime, flags_classifier: bool = False) -> tuple[str, bool, float, float]:
     """Scan one segment, log content_scanned, return (text_for_agent, flagged, latency_ms)."""
-    verdict = fw.scan(seg["text"], seg["source"], rt.policy.firewall, set(rt.policy.tools))
+    verdict = fw.scan(seg["text"], seg["source"], rt.policy.firewall, set(rt.policy.tools),
+                      classifier=rt.classifier if flags_classifier else None)
     rt.audit.emit(AuditEvent(
         run_id=rt.run_id, config=rt.config_name, scenario_id=rt.scenario_id, layer="firewall",
         event="content_scanned", tool=seg["tool_name"], rules=verdict.rules,
         reason=f"{verdict.action} {seg['source']}", evidence=verdict.hits,
         data={"action": verdict.action, "risk_score": verdict.risk_score, "source": seg["source"],
-              "removed": len(verdict.removed), "anomalies": verdict.anomalies},
-        latency_ms={"firewall": verdict.latency_ms},
+              "removed": len(verdict.removed), "anomalies": verdict.anomalies,
+              "classifier_called": verdict.classifier_called},
+        latency_ms={"firewall": verdict.latency_ms - verdict.classifier_ms, "classifier": verdict.classifier_ms},
     ))
-    return verdict.sanitized_text, verdict.action == fw.FLAG, verdict.latency_ms
+    return verdict.sanitized_text, verdict.action == fw.FLAG, verdict.latency_ms - verdict.classifier_ms, verdict.classifier_ms
 
 
 def ingest_untrusted(state: AgentState, config: RunnableConfig) -> dict:
@@ -115,12 +117,15 @@ def ingest_untrusted(state: AgentState, config: RunnableConfig) -> dict:
 
     processed: list[str] = []
     fw_times: list[float] = []
+    clf_times: list[float] = []
     for seg in pending:
         text = seg["text"]
         flagged = False
         if flags["firewall"]:
-            text, flagged, ms = _firewall_segment(seg, rt)
+            text, flagged, ms, clf_ms = _firewall_segment(seg, rt, flags["classifier"])
             fw_times.append(ms)
+            if flags["classifier"]:
+                clf_times.append(clf_ms)
         if flags["spotlight"]:
             text = fw.spotlight(text, nonce=rt.nonce, source=seg["source"], flagged=flagged)
         processed.append(text)
@@ -151,7 +156,7 @@ def ingest_untrusted(state: AgentState, config: RunnableConfig) -> dict:
                                   channel=seg["channel"], confidential=seg["confidential"])
         out["ledger"] = ledger
     if fw_times:
-        out["timings"] = {"firewall": fw_times}
+        out["timings"] = {"firewall": fw_times, **({"classifier": clf_times} if clf_times else {})}
     return out
 
 

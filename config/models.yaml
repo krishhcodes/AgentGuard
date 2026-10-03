@@ -15,3 +15,12 @@ scope:
   temperature: 0
   timeout_s: 30
   max_retries: 1
+
+# M6: the firewall's F3 instruction classifier. It only ever sees ambiguous spans wrapped in random
+# delimiters and must answer strict JSON; a schema violation is itself a signal (FW-CLASSIFIER-ANOMALY).
+classifier:
+  provider: groq
+  model: openai/gpt-oss-20b
+  temperature: 0
+  timeout_s: 10
+  max_retries: 0
