@@ -142,7 +142,8 @@ def record_from_result(spec: ScenarioSpec, config: str, repeat: int, result: Run
         content_clean_removed=clean_removed,
         interventions=interventions,
         interventions_explained=explained,
-        lat_scope_ms=round(sum(t.get("scope", [])), 1),
+        lat_scope_ms=round(max(0.0, sum(t.get("scope", [])) - sum(t.get("agent_first", []))), 1),
+        lat_scope_raw_ms=round(sum(t.get("scope", [])), 1),
         lat_firewall_ms=round(sum(t.get("firewall", [])), 1),
         lat_classifier_ms=round(sum(t.get("classifier", [])), 1),
         lat_guard_ms=round(sum(t.get("guard", [])), 1),
@@ -171,12 +172,13 @@ def run_suite(
     llm_factory: LlmFactory | None = None,
     out_csv: Path | None = None,
     delay_s: float = 0.0,
+    only: list[str] | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> list[RunRecord]:
     settings = settings or load_settings()
     policy = policy or load_policy()
     scenarios = scenarios or load_scenarios()
-    selected = [s for s in scenarios.values() if s.split in splits]
+    selected = [s for s in scenarios.values() if s.split in splits and (not only or s.id in only)]
     if not selected:
         raise ValueError(f"no scenarios for splits {splits}")
     records: list[RunRecord] = []

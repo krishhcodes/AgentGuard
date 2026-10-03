@@ -157,6 +157,7 @@ def cmd_eval(args) -> int:
     records = run_suite(
         configs=configs, splits=splits, repeats=args.repeats,
         settings=load_settings(args.llm_mode),
+        only=[s.strip() for s in args.only.split(",")] if args.only else None,
         out_csv=out_dir / "runs.csv", delay_s=args.delay,
         progress=lambda line: print(line, flush=True),
     )
@@ -219,6 +220,7 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--repeats", type=int, default=3)
     ev.add_argument("--llm-mode", choices=["off", "record", "replay", "auto"],
                     help="auto = reuse recorded runs, call Groq only for new/changed scenarios")
+    ev.add_argument("--only", help="comma-separated scenario ids to run (a quick sample, e.g. for latency)")
     ev.add_argument("--delay", type=float, default=0.0, help="seconds between runs (free-tier pacing)")
     ev.set_defaults(func=cmd_eval)
     fm = sub.add_parser("freeze-manifest", help="write or verify the unseen-set SHA-256 manifest")

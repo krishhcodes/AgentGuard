@@ -15,6 +15,7 @@ scope:
   temperature: 0
   timeout_s: 30
   max_retries: 1
+  reasoning_effort: low  # M6: the scope call is on the critical path; low effort keeps it fast
 
 # M6: the firewall's F3 instruction classifier. It only ever sees ambiguous spans wrapped in random
 # delimiters and must answer strict JSON; a schema violation is itself a signal (FW-CLASSIFIER-ANOMALY).

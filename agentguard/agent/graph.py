@@ -63,10 +63,12 @@ def _build_guarded_graph():
     g.add_node("execute_tools", nodes.execute_tools)
     g.add_node("finalize", nodes.finalize)
 
-    g.add_edge(START, "extract_scope")
-    g.add_edge("extract_scope", "retrieve")
+    # extract_scope runs concurrently with the agent's first turn (same superstep), then both join
+    # before action_guard, so the guard never runs without a scope but scope latency is hidden.
+    g.add_edge(START, "retrieve")
     g.add_edge("retrieve", "ingest_untrusted")
-    g.add_edge("ingest_untrusted", "agent")
+    g.add_conditional_edges("ingest_untrusted", nodes.route_after_ingest_guarded, ["agent", "extract_scope"])
+    g.add_edge("extract_scope", END)
     g.add_conditional_edges("agent", nodes.route_after_agent_guarded, ["action_guard", "finalize"])
     g.add_conditional_edges("action_guard", nodes.route_after_guard, ["human_gate", "execute_tools"])
     g.add_edge("human_gate", "execute_tools")

@@ -50,9 +50,14 @@ def extract_scope(state: AgentState, config: RunnableConfig) -> dict:
               "fallback_used": scope.meta.fallback_used, "dropped_items": scope.meta.dropped_items},
         latency_ms={"scope": scope.meta.latency_ms},
     ))
-    ledger = TaintLedger(user_norm=normalize(state["user_request"])[0],
-                         directory=list(rt.policy.directory.values()))
-    return {"scope": scope, "ledger": ledger, "timings": {"scope": [scope.meta.latency_ms]}}
+    return {"scope": scope, "timings": {"scope": [scope.meta.latency_ms]}}
+
+
+def _new_ledger(state: AgentState, rt: Runtime) -> TaintLedger:
+    """Seeded from the trusted user request only (P1). Created by ingest_untrusted so the Scope
+    Extractor can run in parallel with the agent's first turn."""
+    return TaintLedger(user_norm=normalize(state["user_request"])[0],
+                       directory=list(rt.policy.directory.values()))
 
 
 def extract_scope_fn(state: AgentState, rt: Runtime):
@@ -151,7 +156,7 @@ def ingest_untrusted(state: AgentState, config: RunnableConfig) -> dict:
 
     out: dict = {"messages": messages, "pending_untrusted": []}
     if flags["guard"]:
-        ledger = state.get("ledger") or TaintLedger()
+        ledger = state.get("ledger") or _new_ledger(state, rt)
         for seg in pending:  # provenance/flow use the ORIGINAL text, so the guard still works if the
             ledger.record_segment(text=seg["text"], source=seg["source"],  # firewall misses an injection
                                   channel=seg["channel"], confidential=seg["confidential"])
@@ -172,18 +177,31 @@ def agent(state: AgentState, config: RunnableConfig) -> dict:
         if state["flags"]["spotlight"]:  # the spotlighting clause is owned by the firewall (M5)
             system = f"{BASELINE_SYSTEM_PROMPT}\n\n{SPOTLIGHT_CLAUSE}"
         prompt = [SystemMessage(system), *state["messages"]]
+        started = time.perf_counter()
         response = rt.llm.invoke(prompt)
         if _is_blank(response):  # occasional empty generation: retry once
             response = rt.llm.invoke(prompt)
     except LLMUnavailable as e:
         return {"status": "error", "final_answer": None, "step": state["step"] + 1,
                 "messages": [AIMessage(content=f"[agent error] {e}")]}
-    return {"messages": [response], "step": state["step"] + 1}
+    out: dict = {"messages": [response], "step": state["step"] + 1}
+    if state["flags"]["guard"] and state.get("scope") is None:
+        # The Scope Extractor runs concurrently with this first turn; record the turn's duration so the
+        # report can charge scope only for the part that was NOT hidden behind it.
+        turn_ms = (time.perf_counter() - started) * 1000
+        out["timings"] = {"agent_first": [max(turn_ms, float(getattr(rt.llm, "last_latency_ms", 0.0) or 0.0))]}
+    return out
 
 
 def _proposed_calls(state: AgentState) -> list[dict]:
     last = state["messages"][-1]
     return list(last.tool_calls) if isinstance(last, AIMessage) and last.tool_calls else []
+
+
+def route_after_ingest_guarded(state: AgentState, config: RunnableConfig) -> list[str]:
+    """First pass: run the Scope Extractor in parallel with the agent's first turn (the guard only
+    needs the scope when the agent proposes a call). Later passes: the scope already exists."""
+    return ["agent"] if state.get("scope") is not None else ["agent", "extract_scope"]
 
 
 def route_after_agent(state: AgentState, config: RunnableConfig) -> str:

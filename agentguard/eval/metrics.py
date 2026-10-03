@@ -35,7 +35,9 @@ class RunRecord:
     content_clean_removed: int = 0  # ...of those, SANITIZEd/QUARANTINEd (content false positives)
     interventions: int = 0  # guard BLOCK/ASK + firewall SANITIZE/QUARANTINE events in the run (M6)
     interventions_explained: int = 0  # ...of those, carrying a reason and rule/evidence (D4)
-    lat_scope_ms: float = 0.0  # per-run added latency by layer (sum over the run's invocations)
+    lat_scope_ms: float = 0.0  # per-run added latency by layer (sum over the run's invocations); scope is
+    # charged only for the part NOT hidden behind the agent's concurrent first turn
+    lat_scope_raw_ms: float = 0.0  # the scope call's own duration
     lat_firewall_ms: float = 0.0
     lat_classifier_ms: float = 0.0
     lat_guard_ms: float = 0.0

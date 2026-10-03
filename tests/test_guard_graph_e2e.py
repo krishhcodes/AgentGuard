@@ -202,3 +202,34 @@ def test_record_expected_ask_is_not_a_false_positive(scenarios, settings):
                      scope_llm=ScopeLLM(AMBIG_SCOPE), human=approve_all, settings=settings)
     rec = record_from_result(scenarios["ambig-01-the-team"], "guard_only", 1, r)
     assert rec.benign_false_positive is False
+
+
+def test_scope_runs_concurrently_with_the_agents_first_turn(scenarios):
+    """The scope extractor and the agent's first LLM call overlap (latency hiding). Each waits for
+    the other: if they ran sequentially, one would time out and the run would never get this far."""
+    import threading
+
+    scope_started, agent_started = threading.Event(), threading.Event()
+    seen = {}
+
+    class WaitingScope(ScopeLLM):
+        def invoke(self, messages):
+            scope_started.set()
+            seen["agent_started_while_scope_ran"] = agent_started.wait(timeout=5)
+            return super().invoke(messages)
+
+    inner = hijacked_agent()
+
+    class WaitingAgent:
+        model_name = "agent-test"
+
+        def invoke(self, messages):
+            agent_started.set()
+            seen["scope_started_while_agent_ran"] = scope_started.wait(timeout=5)
+            return inner.invoke(messages)
+
+    result = run_scenario(scenarios["plain-01"], config="guard_only", llm=WaitingAgent(),
+                          scope_llm=WaitingScope(READ_ONLY), human=deny_all)
+    assert seen == {"agent_started_while_scope_ran": True, "scope_started_while_agent_ran": True}
+    assert result.status == "ok" and result.scope is not None  # the guard still had its scope
+    assert any(d.get("guard_decision") == "BLOCK" for d in result.decisions)

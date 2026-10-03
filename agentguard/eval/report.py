@@ -80,6 +80,11 @@ def latency_rows(records: list[RunRecord]) -> list[dict]:
             if any(vals):
                 rows.append({"config": config, "layer": name, "n_runs": len(runs),
                              "p50_ms": round(_percentile(vals, 0.5), 1), "p95_ms": round(_percentile(vals, 0.95), 1)})
+        raw = [r.lat_scope_raw_ms for r in runs]
+        if any(raw):
+            rows.append({"config": config, "layer": "scope (raw, overlapped with agent turn 1; not in TOTAL)",
+                         "n_runs": len(runs), "p50_ms": round(_percentile(raw, 0.5), 1),
+                         "p95_ms": round(_percentile(raw, 0.95), 1)})
         rows.append({"config": config, "layer": "TOTAL", "n_runs": len(runs),
                      "p50_ms": round(_percentile(totals, 0.5), 1), "p95_ms": round(_percentile(totals, 0.95), 1)})
     return rows
