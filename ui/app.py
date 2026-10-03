@@ -70,13 +70,25 @@ def render_trace(messages, status) -> None:
                 st.text(m.content)
 
 
-def render_outbox(sandbox, *, leaked_hint: bool) -> None:
+def _outbox_note(events) -> str:
+    """Name the layer that actually stopped the attack (the guard only if it really blocked something)."""
+    guard_blocked = any(e.event == "guard_decision" and e.decision == "BLOCK" for e in events)
+    fw_removed = any(e.event == "content_scanned" and e.data.get("action") in ("SANITIZE", "QUARANTINE")
+                     for e in events)
+    if guard_blocked:
+        return " The guard blocked the exfiltration."
+    if fw_removed:
+        return " The firewall removed the injected instruction before the agent saw it."
+    return ""
+
+
+def render_outbox(sandbox, *, note: str = "") -> None:
     out = sandbox.state.outbox
     st.markdown("**Outbox** (mock; nothing is really sent)")
     if out:
         st.dataframe(pd.DataFrame([vars(e) for e in out]), width='stretch')
     else:
-        st.caption("No emails sent." + (" The guard blocked the exfiltration." if leaked_hint else ""))
+        st.caption("No emails sent." + note)
 
 
 def _decisions_from_events(events) -> list[dict]:
@@ -189,7 +201,7 @@ def render_baseline_column(result) -> None:
     st.subheader("🔴 Unprotected")
     st.caption(f"baseline · {result.run_id} · {result.status} · {result.duration_s:.1f}s")
     render_verdict(result)
-    render_outbox(result.sandbox, leaked_hint=False)
+    render_outbox(result.sandbox)
     with st.expander("Step trace", expanded=False):
         render_trace(result.messages, result.status)
 
@@ -224,7 +236,7 @@ def render_guard_column() -> None:
     render_verdict(result)
     render_firewall_summary(result.events)
     render_decisions(result.events)
-    render_outbox(result.sandbox, leaked_hint=True)
+    render_outbox(result.sandbox, note=_outbox_note(result.events))
     with st.expander("Step trace", expanded=False):
         render_trace(result.messages, result.status)
 
