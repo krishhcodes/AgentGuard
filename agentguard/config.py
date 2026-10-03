@@ -15,7 +15,7 @@ SUITES_DIR = ROOT / "suites"
 
 load_dotenv(ROOT / ".env", override=False)
 
-LLM_MODES = ("off", "record", "replay")
+LLM_MODES = ("off", "record", "replay", "auto")
 
 
 @dataclass(frozen=True)

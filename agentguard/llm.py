@@ -156,13 +156,14 @@ class LLMClient:
     def invoke(self, messages: Sequence[BaseMessage]) -> AIMessage:
         key = cache_key(self.role, self.model_name, messages, self.tools)
         path = self._cache_path(key)
-        if self.mode == "replay":
-            if not path.exists():
-                raise CacheMiss(f"no recorded {self.role} response for this request (key {key[:12]})")
+        # replay and auto both reuse a recorded response when present (free, offline).
+        if self.mode in ("replay", "auto") and path.exists():
             data = json.loads(path.read_text(encoding="utf-8"))
             return messages_from_dict([data["response"]])[0]
+        if self.mode == "replay":
+            raise CacheMiss(f"no recorded {self.role} response for this request (key {key[:12]})")
         result = self._live_invoke(messages)
-        if self.mode == "record":
+        if self.mode in ("record", "auto"):  # auto records the live calls it had to make
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(
                 json.dumps({"role": self.role, "model": self.model_name, "response": message_to_dict(result)}),

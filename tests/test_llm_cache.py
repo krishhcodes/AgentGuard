@@ -36,6 +36,17 @@ def test_cache_key_depends_on_model_tools_and_messages():
     assert k == cache_key("agent", "m1", [HumanMessage("x", id="random-id")], TOOLS)
 
 
+def test_auto_mode_reuses_cache_and_records_misses(tmp_path):
+    msgs = [HumanMessage("hello")]
+    live = ScriptedChatModel([_reply()])
+    client = LLMClient("agent", "m1", TOOLS, "auto", tmp_path, inner=live)
+    first = client.invoke(msgs)          # miss -> live call + record
+    assert live.calls == 1
+    again = LLMClient("agent", "m1", TOOLS, "auto", tmp_path, inner=ScriptedChatModel([]))
+    cached = again.invoke(msgs)          # hit -> no live call
+    assert cached.tool_calls == first.tool_calls
+
+
 def test_off_mode_writes_nothing(tmp_path):
     LLMClient("agent", "m1", TOOLS, "off", tmp_path, inner=ScriptedChatModel([_reply()])).invoke([HumanMessage("x")])
     assert not any(tmp_path.rglob("*.json"))
