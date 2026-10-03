@@ -169,3 +169,36 @@ def test_invalid_api_key_is_classified_and_rotated_past(monkeypatch, tmp_path):
     monkeypatch.setattr(llm, "_build_live_model", lambda cfg, key=None: PerKey(key))
     client = llm.LLMClient("agent", "m", [], "off", tmp_path, inner=llm._LazyLive(llm.RoleConfig(provider="groq", model="m")))
     assert client.invoke([HumanMessage("x")]).content == "ok" and ring.idx == 1
+
+
+def test_patient_mode_waits_for_the_daily_window_then_succeeds(monkeypatch, tmp_path):
+    import agentguard.llm as llm
+
+    monkeypatch.setenv("AGENTGUARD_PATIENT_S", "3600")
+    ring = llm._KeyRing(["k1"])
+    monkeypatch.setattr(llm, "groq_key_ring", lambda: ring)
+    calls = {"n": 0}
+
+    class Capped:
+        def bind_tools(self, tools):
+            return self
+
+        def invoke(self, messages):
+            calls["n"] += 1
+            if calls["n"] <= 2:
+                raise RateLimitError(TPD_429)  # "... per day ... try again in 7m12s"
+            return AIMessage(content="ok")
+
+    monkeypatch.setattr(llm, "_build_live_model", lambda cfg, key=None: Capped())
+    client = llm.LLMClient("agent", "m", [], "off", tmp_path, inner=llm._LazyLive(llm.RoleConfig(provider="groq", model="m")))
+    sleeps = []
+    client._sleep = sleeps.append
+    assert client.invoke([HumanMessage("x")]).content == "ok"
+    assert len(sleeps) == 2 and all(30 <= s <= 900 for s in sleeps)
+
+
+def test_default_is_fail_fast_when_all_keys_capped(monkeypatch, tmp_path):
+    monkeypatch.delenv("AGENTGUARD_PATIENT_S", raising=False)
+    client, _ = _per_key_live(monkeypatch, tmp_path, ["k1"], failing={"k1"})
+    with pytest.raises(LLMUnavailable):
+        client.invoke([HumanMessage("x")])

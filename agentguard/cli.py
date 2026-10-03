@@ -173,6 +173,8 @@ def cmd_eval(args) -> int:
     from agentguard.eval.harness import run_suite
     from agentguard.eval.report import render_markdown, write_latency_csv, write_misses_csv, write_summary_csv
 
+    if args.patient:
+        os.environ["AGENTGUARD_PATIENT_S"] = str(6 * 3600)
     if args.freeze and not _freeze_ok(args):
         return 1
     configs = [c.strip() for c in args.configs.split(",") if c.strip()]
@@ -249,6 +251,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="auto = reuse recorded runs, call Groq only for new/changed scenarios")
     ev.add_argument("--freeze", action="store_true",
                     help="refuse on a dirty git tree; log the commit hash to results/UNSEEN_RUNS.log")
+    ev.add_argument("--patient", action="store_true",
+                    help="when every Groq key hits its daily cap, wait for the window to free up (unattended runs)")
     ev.add_argument("--only", help="comma-separated scenario ids to run (a quick sample, e.g. for latency)")
     ev.add_argument("--delay", type=float, default=0.0, help="seconds between runs (free-tier pacing)")
     ev.set_defaults(func=cmd_eval)

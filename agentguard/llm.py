@@ -72,6 +72,15 @@ def classify_rate_limit(error: Exception) -> tuple[str | None, float]:
     return ("tpd" if daily else "tpm"), min((secs if secs is not None else 5.0) + 0.5, 60.0)
 
 
+def patient_budget_s() -> float:
+    """Max seconds one call may wait for the rolling daily token window to free up (0 = fail fast).
+    Set by `eval --patient` so an unattended run survives a daily cap instead of erroring."""
+    try:
+        return float(os.environ.get("AGENTGUARD_PATIENT_S", "0") or 0)
+    except ValueError:
+        return 0.0
+
+
 def load_groq_keys() -> list[str]:
     """All configured Groq keys, in order, de-duplicated. Reads os.environ and .env, accepting
     GROQ_API_KEYS (comma/space/newline separated) and GROQ_API_KEY / GROQ_API_KEY1.. / GROQ_API_KEY_1.."""
@@ -247,6 +256,7 @@ class LLMClient:
         lazy = self._inner if isinstance(self._inner, _LazyLive) else None
         ring = groq_key_ring() if lazy is not None else None
         tpm_attempts = 0
+        patient_spent = 0.0
         while True:
             try:
                 t0 = time.perf_counter()
@@ -268,6 +278,17 @@ class LLMClient:
                     raise LLMUnavailable(f"{type(e).__name__}: {e}") from e
                 if kind in ("tpd", "auth"):  # daily cap or dead key: abandon it for another, no sleep
                     if ring.rotate():
+                        self._bound = None
+                        continue
+                    # Every key is capped. In patient mode (unattended eval) wait for the rolling daily
+                    # window to free tokens on the earliest key, then start over from the first key.
+                    budget = patient_budget_s()
+                    if kind == "tpd" and patient_spent < budget:
+                        secs = _parse_retry_seconds(str(e))
+                        pause = min(max((secs or 60.0) + 5.0, 30.0), 900.0)
+                        patient_spent += pause
+                        self._sleep(pause)
+                        ring.idx = 0
                         self._bound = None
                         continue
                     raise LLMUnavailable("all Groq API keys hit their daily token limit or are invalid") from e
