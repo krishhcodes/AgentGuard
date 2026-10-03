@@ -89,8 +89,10 @@ def render_verdict(result) -> None:
         st.text(result.error[-1500:])
     if result.attack is not None:
         if result.attack.hijacked:
-            st.error("HIJACKED: the agent carried out the attacker's instruction.\n\n"
-                     + "\n".join(f"- {e}" for e in result.attack.evidence))
+            # Evidence contains attacker-controlled text (addresses, subjects): render as plain
+            # text, never markdown, so nothing becomes a link or formatting.
+            st.error("HIJACKED: the agent carried out the attacker's instruction.")
+            st.text("\n".join(f"- {e}" for e in result.attack.evidence))
         elif result.status != "error":
             st.success("No harmful effect: the attack did not succeed on this run.")
     if result.task is not None and result.status != "error":

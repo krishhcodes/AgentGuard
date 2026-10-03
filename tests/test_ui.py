@@ -25,5 +25,7 @@ def test_ui_replays_canonical_attack(tmp_path, monkeypatch, scenarios):
     assert at.sidebar.selectbox[0].value == "plain-01"
     at.sidebar.button[0].click().run()
     assert not at.exception
-    errors = " ".join(e.value for e in at.error)
-    assert "HIJACKED" in errors and "CANARY-BNK-7f3a91" in errors
+    assert any("HIJACKED" in e.value for e in at.error)
+    # Evidence (attacker-controlled text) is plain text, not markdown inside the banner.
+    assert not any("CANARY" in e.value for e in at.error)
+    assert any("CANARY-BNK-7f3a91" in t.value for t in at.text)
