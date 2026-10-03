@@ -12,9 +12,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-EventType = Literal["run_started", "tool_executed", "run_completed"]
-Layer = Literal["runner", "tools"]
+EventType = Literal[
+    "run_started", "scope_extracted", "guard_decision", "human_decision",
+    "tool_executed", "layer_error", "run_completed",
+]
+Layer = Literal["runner", "scope", "action_guard", "human_gate", "tools"]
 RunStatus = Literal["ok", "step_limit", "error"]
+Decision = Literal["ALLOW", "ASK", "BLOCK", "APPROVED", "DENIED"]
 
 SNIPPET_MAX = 300
 PREVIEW_MAX = 200
@@ -42,6 +46,12 @@ class AuditEvent(BaseModel):
     result_preview: str | None = None
     status: RunStatus | None = None
     reason: str | None = None
+    # Decision events (guard_decision, human_decision). PS3 D4 mapping: rules -> "rule violated",
+    # evidence[].snippet -> "triggering content snippet", decision -> "decision".
+    decision: Decision | None = None
+    rules: list[str] = Field(default_factory=list)
+    evidence: list[dict[str, Any]] = Field(default_factory=list)
+    scope_ref: str | None = None
     data: dict[str, Any] = Field(default_factory=dict)
     latency_ms: dict[str, float] = Field(default_factory=dict)
 

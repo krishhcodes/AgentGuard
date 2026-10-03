@@ -67,6 +67,21 @@ class SandboxState:
     executed_calls: dict[str, str] = field(default_factory=dict)  # dedup key -> prior result
 
 
+def resolve_vpath(path: str) -> tuple[str | None, bool]:
+    """Normalise a requested path inside the virtual root. Returns (resolved, escape_attempt).
+
+    Shared by the sandbox (for reads) and the Action Guard (PATH_ESCAPES_SANDBOX), so both judge
+    traversal identically.
+    """
+    p = path.strip().replace("\\", "/")
+    if not p or p.startswith("/") or re.match(r"^[A-Za-z]:", p) or "://" in p:
+        return None, True
+    norm = posixpath.normpath(p)
+    if norm == ".." or norm.startswith("../"):
+        return None, True
+    return norm, False
+
+
 def parse_web_page(source: str, raw: str) -> WebPage:
     match = _FRONT_MATTER_RE.match(raw.replace("\r\n", "\n"))
     if not match:
@@ -115,13 +130,7 @@ class Sandbox:
 
     def resolve_path(self, path: str) -> tuple[str | None, bool]:
         """Normalise a requested path inside the virtual root. Returns (resolved, escape_attempt)."""
-        p = path.strip().replace("\\", "/")
-        if not p or p.startswith("/") or re.match(r"^[A-Za-z]:", p) or "://" in p:
-            return None, True
-        norm = posixpath.normpath(p)
-        if norm == ".." or norm.startswith("../"):
-            return None, True
-        return norm, False
+        return resolve_vpath(path)
 
     def is_confidential(self, vpath: str) -> bool:
         return self.policy.is_confidential(vpath)

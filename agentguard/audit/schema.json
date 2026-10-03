@@ -28,6 +28,9 @@
     "layer": {
       "enum": [
         "runner",
+        "scope",
+        "action_guard",
+        "human_gate",
         "tools"
       ],
       "title": "Layer",
@@ -36,7 +39,11 @@
     "event": {
       "enum": [
         "run_started",
+        "scope_extracted",
+        "guard_decision",
+        "human_decision",
         "tool_executed",
+        "layer_error",
         "run_completed"
       ],
       "title": "Event",
@@ -107,6 +114,52 @@
       ],
       "default": null,
       "title": "Reason"
+    },
+    "decision": {
+      "anyOf": [
+        {
+          "enum": [
+            "ALLOW",
+            "ASK",
+            "BLOCK",
+            "APPROVED",
+            "DENIED"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Decision"
+    },
+    "rules": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Rules",
+      "type": "array"
+    },
+    "evidence": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "scope_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scope Ref"
     },
     "data": {
       "additionalProperties": true,

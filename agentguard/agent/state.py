@@ -12,8 +12,40 @@ from langgraph.graph.message import add_messages
 
 from agentguard.audit import AuditLogger
 from agentguard.config import Settings
+from agentguard.guard.rules import GuardDecision
 from agentguard.rag.retriever import Retriever
 from agentguard.sandbox import Sandbox, ToolRegistry
+from agentguard.scope.models import Scope
+
+
+class GuardFlags(TypedDict):
+    firewall: bool
+    classifier: bool
+    spotlight: bool
+    guard: bool
+
+
+# config name -> which layers are active. Defence layers only ADD nodes (ARCHITECTURE P8/5.5).
+# firewall/classifier/spotlight land in M5/M6; their flags exist here but no config turns them on yet.
+CONFIG_FLAGS: dict[str, GuardFlags] = {
+    "baseline": {"firewall": False, "classifier": False, "spotlight": False, "guard": False},
+    "guard_only": {"firewall": False, "classifier": False, "spotlight": False, "guard": True},
+    # compromised_agent = guard on, driven by a ScriptedChatModel that always emits the attack's calls.
+    "compromised_agent": {"firewall": False, "classifier": False, "spotlight": False, "guard": True},
+}
+
+
+def config_flags(config: str) -> GuardFlags:
+    if config not in CONFIG_FLAGS:
+        raise ValueError(f"unknown config {config!r}; available: {sorted(CONFIG_FLAGS)}")
+    return dict(CONFIG_FLAGS[config])  # copy, so per-run state never mutates the table
+
+
+def _merge_timings(old: dict | None, new: dict | None) -> dict:
+    merged = {k: list(v) for k, v in (old or {}).items()}
+    for k, v in (new or {}).items():
+        merged.setdefault(k, []).extend(v)
+    return merged
 
 
 class RawSegment(TypedDict):
@@ -29,12 +61,16 @@ class RawSegment(TypedDict):
 
 class AgentState(TypedDict):
     run_id: str
+    flags: GuardFlags  # T0; which defence layers are active this run
     user_request: str  # T1
     messages: Annotated[list[AnyMessage], add_messages]
     pending_untrusted: list[RawSegment]  # U; replaced (not appended) by each producer
+    scope: Scope | None  # T2; set by extract_scope when guard is on
+    decisions: list[GuardDecision]  # guard verdicts for the latest proposed calls (replaced each turn)
     step: int
     status: str  # ok | step_limit | error
     final_answer: str | None
+    timings: Annotated[dict[str, list[float]], _merge_timings]  # per-layer added latency (ms)
 
 
 @dataclass
@@ -46,5 +82,7 @@ class Runtime:
     sandbox: Sandbox
     registry: ToolRegistry
     retriever: Retriever
-    llm: Any  # LLMClient-like: .invoke(messages) -> AIMessage
+    llm: Any  # agent LLMClient-like: .invoke(messages) -> AIMessage (U* output)
     audit: AuditLogger
+    policy: Any = None  # Policy (T0); used by extract_scope and action_guard
+    scope_llm: Any = None  # scope-role LLMClient-like; None -> extractor uses its fallback

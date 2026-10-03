@@ -13,12 +13,15 @@ import time
 
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
+from langgraph.types import interrupt
 
 from agentguard.agent.prompts import BASELINE_SYSTEM_PROMPT
 from agentguard.agent.state import AgentState, RawSegment, Runtime
 from agentguard.audit import AuditEvent
 from agentguard.audit.events import preview_args, truncate
+from agentguard.guard import rules as guard_rules
 from agentguard.llm import LLMUnavailable
+from agentguard.scope import extract_scope as run_scope_extractor
 
 RETRIEVE_TOOL = "retrieve_context"
 RETRIEVE_CALL_ID = "ctx-0"
@@ -26,6 +29,30 @@ RETRIEVE_CALL_ID = "ctx-0"
 
 def _rt(config: RunnableConfig) -> Runtime:
     return config["configurable"]["runtime"]
+
+
+def extract_scope(state: AgentState, config: RunnableConfig) -> dict:
+    """Compute the authorised Scope from the trusted user request only (invariant P1)."""
+    rt = _rt(config)
+    scope = extract_scope_fn(state, rt)
+    rt.audit.emit(AuditEvent(
+        run_id=rt.run_id, config=rt.config_name, scenario_id=rt.scenario_id,
+        layer="scope", event="scope_extracted", scope_ref=scope.scope_id,
+        reason=scope.task_summary,
+        data={"allowed_tools": scope.allowed_tools, "recipients": scope.recipients,
+              "confidential_resources": scope.confidential_resources,
+              "write_targets": [w.model_dump() for w in scope.write_targets],
+              "ambiguities": [a.model_dump() for a in scope.ambiguities],
+              "fallback_used": scope.meta.fallback_used, "dropped_items": scope.meta.dropped_items},
+        latency_ms={"scope": scope.meta.latency_ms},
+    ))
+    return {"scope": scope, "timings": {"scope": [scope.meta.latency_ms]}}
+
+
+def extract_scope_fn(state: AgentState, rt: Runtime):
+    model_name = getattr(rt.scope_llm, "model_name", "scope")
+    return run_scope_extractor(state["user_request"], rt.policy, rt.scope_llm,
+                               scope_id=f"scope-{state['run_id']}", model_name=model_name)
 
 
 def retrieve(state: AgentState, config: RunnableConfig) -> dict:
@@ -91,23 +118,105 @@ def agent(state: AgentState, config: RunnableConfig) -> dict:
     return {"messages": [response], "step": state["step"] + 1}
 
 
+def _proposed_calls(state: AgentState) -> list[dict]:
+    last = state["messages"][-1]
+    return list(last.tool_calls) if isinstance(last, AIMessage) and last.tool_calls else []
+
+
 def route_after_agent(state: AgentState, config: RunnableConfig) -> str:
     if state.get("status") == "error":
         return "finalize"
-    last = state["messages"][-1]
-    if isinstance(last, AIMessage) and last.tool_calls:
+    if _proposed_calls(state):
         if state["step"] >= _rt(config).settings.max_steps:
             return "finalize"
         return "execute_tools"
     return "finalize"
 
 
+def route_after_agent_guarded(state: AgentState, config: RunnableConfig) -> str:
+    if state.get("status") == "error":
+        return "finalize"
+    if _proposed_calls(state):
+        if state["step"] >= _rt(config).settings.max_steps:
+            return "finalize"
+        return "action_guard"
+    return "finalize"
+
+
+def action_guard(state: AgentState, config: RunnableConfig) -> dict:
+    """Decide ALLOW / BLOCK / ASK for every proposed tool call (deterministic; P2, P5)."""
+    rt = _rt(config)
+    scope = state["scope"]
+    decisions: list[guard_rules.GuardDecision] = []
+    guard_times: list[float] = []
+    for call in _proposed_calls(state):
+        started = time.perf_counter()
+        decision = guard_rules.decide(call, scope, rt.policy)
+        decision.latency_ms = round((time.perf_counter() - started) * 1000, 3)
+        guard_times.append(decision.latency_ms)
+        decisions.append(decision)
+        rt.audit.emit(AuditEvent(
+            run_id=rt.run_id, config=rt.config_name, scenario_id=rt.scenario_id,
+            layer="action_guard", event="guard_decision", tool=decision.tool,
+            args=decision.args_redacted, decision=decision.decision,
+            rules=decision.rule_ids, reason=decision.reason, evidence=decision.evidence,
+            scope_ref=decision.scope_ref, data={"call_id": decision.call_id},
+            latency_ms={"guard": decision.latency_ms},
+        ))
+    return {"decisions": decisions, "timings": {"guard": guard_times}}
+
+
+def route_after_guard(state: AgentState, config: RunnableConfig) -> str:
+    return "human_gate" if any(d.decision == guard_rules.ASK for d in state["decisions"]) else "execute_tools"
+
+
+def human_gate(state: AgentState, config: RunnableConfig) -> dict:
+    """Pause on ASK decisions and resume with approve/deny. Re-execution safe: nothing happens
+    before interrupt(), because LangGraph re-runs this node from the top on resume (P / 6.11)."""
+    decisions = state["decisions"]
+    asks = [
+        {"call_id": d.call_id, "tool": d.tool, "args": d.args_redacted,
+         "rules": d.rule_ids, "reason": d.reason, "evidence": d.evidence}
+        for d in decisions if d.decision == guard_rules.ASK
+    ]
+    answers = interrupt({"asks": asks}) or {}  # {call_id: "approve"|"deny"}; default below is deny
+    rt = _rt(config)
+    for d in decisions:
+        if d.decision != guard_rules.ASK:
+            continue
+        approved = str(answers.get(d.call_id, "deny")).lower() == "approve"
+        d.decision = "APPROVED" if approved else "DENIED"
+        rt.audit.emit(AuditEvent(
+            run_id=rt.run_id, config=rt.config_name, scenario_id=rt.scenario_id,
+            layer="human_gate", event="human_decision", tool=d.tool, args=d.args_redacted,
+            decision=d.decision, rules=d.rule_ids, reason=d.reason, scope_ref=d.scope_ref,
+            data={"call_id": d.call_id},
+        ))
+    return {"decisions": decisions}
+
+
+_PERMITTED = {guard_rules.ALLOW, "APPROVED"}
+
+
 def execute_tools(state: AgentState, config: RunnableConfig) -> dict:
-    """The only node that performs tool side effects."""
+    """The only node that performs tool side effects. In guarded configs it runs a call only when
+    a matching GuardDecision permits it (invariant P3); blocked/denied calls get a synthetic
+    observation so the agent keeps working on the user's real task."""
     rt = _rt(config)
     last = state["messages"][-1]
+    guarded = state["flags"]["guard"]
+    by_call = {d.call_id: d for d in state.get("decisions", [])} if guarded else {}
     segments: list[RawSegment] = []
     for tc in last.tool_calls:
+        if guarded:
+            decision = by_call.get(tc["id"])
+            if decision is None or decision.decision not in _PERMITTED:
+                rules = decision.rule_ids if decision else ["NO_DECISION"]
+                note = (f"[blocked by policy: {', '.join(rules) or 'not authorised'}] the requested "
+                        f"{tc['name']} call was not performed. Continue the user's original task without it.")
+                segments.append(RawSegment(text=note, source="guard", channel=f"tool:{tc['name']}",
+                                           confidential=False, tool_call_id=tc["id"], tool_name=tc["name"]))
+                continue
         started = time.perf_counter()
         # Idempotency: a naive agent can loop on the same call. Don't repeat the side effect;
         # return a note instead. Keyed on (name, args), so distinct attack steps are unaffected,

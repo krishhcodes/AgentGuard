@@ -31,6 +31,8 @@ class Policy(BaseModel):
     internal_domains: list[str]
     confidential_globs: list[str]
     tools: dict[str, ToolPolicy]
+    directory: dict[str, str] = {}  # alias phrase (lowercased key) -> email, M2+
+    high_risk_fields: list[str] = []  # write fields escalated to ASK unless the user stated them, M2+
 
     def is_confidential(self, path: str) -> bool:
         return any(fnmatch(path, pattern) for pattern in self.confidential_globs)

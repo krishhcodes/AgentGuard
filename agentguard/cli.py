@@ -38,7 +38,20 @@ def cmd_list(args) -> int:
     return 0
 
 
+def _stdin_human(payload) -> dict:
+    """CLI approve/deny prompt for ASK decisions. Default (empty input) denies (fail closed)."""
+    answers = {}
+    for ask in payload.get("asks", []):
+        print(f"\nASK  {ask['tool']}({json.dumps(ask['args'], ensure_ascii=False)})")
+        print(f"     rules: {', '.join(ask['rules'])}")
+        print(f"     {ask['reason']}")
+        choice = input("     approve this call? [y/N] ").strip().lower()
+        answers[ask["call_id"]] = "approve" if choice in ("y", "yes") else "deny"
+    return answers
+
+
 def cmd_run(args) -> int:
+    from agentguard.agent.graph import CONFIGS
     from agentguard.eval.suites import load_scenarios
     from agentguard.runner import run_scenario
 
@@ -46,10 +59,18 @@ def cmd_run(args) -> int:
     if args.scenario not in scenarios:
         print(f"Unknown scenario {args.scenario!r}. Try: python -m agentguard list", file=sys.stderr)
         return 2
-    result = run_scenario(scenarios[args.scenario], user_request=args.request,
-                          settings=load_settings(args.llm_mode))
+    if args.config not in CONFIGS:
+        print(f"Unknown config {args.config!r}. Available: {', '.join(CONFIGS)}", file=sys.stderr)
+        return 2
+    result = run_scenario(scenarios[args.scenario], config=args.config, user_request=args.request,
+                          human=_stdin_human, settings=load_settings(args.llm_mode))
     print(f"run {result.run_id}  config={result.config}  status={result.status}  {result.duration_s:.1f}s\n")
     print_trace(result)
+    if result.decisions:
+        print("\nGuard decisions:")
+        for d in result.decisions:
+            rules = f" [{', '.join(d['rules'])}]" if d["rules"] else ""
+            print(f"  {d['decision']:<9} {d['tool']}{rules}")
     print()
     if result.error:
         print(f"ERROR: {_short(result.error, 600)}")
@@ -178,8 +199,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("list", help="list scenarios").set_defaults(func=cmd_list)
     run = sub.add_parser("run", help="run one scenario against the agent")
     run.add_argument("--scenario", required=True)
+    run.add_argument("--config", default="baseline",
+                     help="baseline | guard_only | compromised_agent")
     run.add_argument("--request", help="override the scenario's user request")
-    run.add_argument("--llm-mode", choices=["off", "record", "replay", "auto"], help="default: record")
+    run.add_argument("--llm-mode", choices=["off", "record", "replay", "auto"], help="default: auto")
     run.set_defaults(func=cmd_run)
     ev = sub.add_parser("eval", help="run suites x configs x repeats and write metrics")
     ev.add_argument("--configs", default="baseline", help="comma-separated (M1: baseline only)")

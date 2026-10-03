@@ -1,11 +1,30 @@
-# AgentGuard policy (T0). M0 keys only: the tool registry, confidential globs, internal domains.
-# Later milestones add directory aliases, high-risk fields, secret patterns and thresholds.
+# AgentGuard policy (T0). M0 keys: the tool registry, confidential globs, internal domains.
+# M2 adds directory aliases and high-risk write fields (consumed by the Scope Extractor and
+# Action Guard). Later milestones add secret patterns and firewall/guard thresholds.
 
 internal_domains:
   - company.example
 
 confidential_globs:
   - "confidential/**"
+
+# Directory aliases (T0): phrases a user may name instead of an address. The Scope Extractor
+# resolves ONLY aliases the user text literally contains; it never invents recipients.
+directory:
+  "procurement team": procurement@company.example
+  "procurement": procurement@company.example
+  "finance team": finance@company.example
+  "finance": finance@company.example
+  "it team": it@company.example
+  "legal team": legal@company.example
+
+# Write fields that change money movement or vendor identity. A write that sets one of these to
+# a value the user did not literally state is escalated (HIGH_RISK_FIELD -> ASK).
+high_risk_fields:
+  - bank_account
+  - payment_status
+  - status
+  - contact_email
 
 tools:
   read_file:
