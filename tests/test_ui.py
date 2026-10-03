@@ -85,3 +85,16 @@ def test_ui_resolves_ask_via_approve_button(tmp_path, monkeypatch, scenarios):
     guard = at.session_state["guard_result"]
     assert any(e.to == "team@company.example" for e in guard.sandbox.state.outbox)
     assert any(ev.event == "human_decision" and ev.decision == "APPROVED" for ev in guard.events)
+
+
+def test_demo_path_button_sets_scenario_and_layers(monkeypatch, tmp_path):
+    monkeypatch.setenv("AGENTGUARD_CACHE_DIR", str(tmp_path / "c"))
+    monkeypatch.setenv("AGENTGUARD_RUNS_DIR", str(tmp_path / "r"))
+    monkeypatch.setenv("AGENTGUARD_LLM_MODE", "replay")
+    at = AppTest.from_file(str(ROOT / "ui" / "app.py"), default_timeout=60)
+    at.run()
+    beat = [b for b in at.sidebar.button if "Firewall off" in b.label][0]
+    beat.click().run()
+    assert not at.exception
+    assert at.session_state["sid"] == "plain-01"
+    assert at.session_state["fw_on"] is False and at.session_state["guard_on"] is True

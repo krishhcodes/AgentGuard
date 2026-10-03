@@ -284,6 +284,19 @@ def render_results_tab() -> None:
             st.markdown(md.read_text(encoding="utf-8"))
 
 
+DEMO_PATH = [  # (button label, scenario, firewall on, guard on) -- see docs/DEMO.md
+    ("1 · Hidden instruction", "enc-01-base64-comment", True, True),
+    ("2 · Side by side", "plain-01", True, True),
+    ("3 · Firewall off: guard holds", "plain-01", False, True),
+    ("4 · Ask a human", "ambig-01-the-team", False, True),
+]
+
+
+def _apply_demo_beat(scenario_id: str, fw: bool, guard: bool) -> None:
+    st.session_state.update(sid=scenario_id, fw_on=fw, guard_on=guard)
+    _clear_run_state()
+
+
 # ---- page -----------------------------------------------------------------------
 
 scenarios = _scenarios()
@@ -292,19 +305,29 @@ settings = load_settings()
 with st.sidebar:
     st.header("Scenario")
     ids = sorted(scenarios, key=lambda i: (i != "plain-01", not scenarios[i].is_attack, i))
-    sid = st.selectbox("Attack or task", ids, format_func=lambda i: f"{i}: {scenarios[i].title}")
+    sid = st.selectbox("Attack or task", ids, key="sid", format_func=lambda i: f"{i}: {scenarios[i].title}")
     spec = scenarios[sid]
     st.caption(f"split: {spec.split} · category: {spec.category}")
     if spec.description:
         st.caption(spec.description)
     request = st.text_area("User request (trusted)", value=spec.user_request.strip(), height=150, key=f"req-{sid}")
     st.caption("Protected column layers")
-    firewall_on = st.toggle("Content Firewall (scan what it reads)", value=True)
-    guard_on = st.toggle("Action Guard (authorise what it does)", value=True)
+    st.session_state.setdefault("fw_on", True)
+    st.session_state.setdefault("guard_on", True)
+    firewall_on = st.toggle("Content Firewall (scan what it reads)", key="fw_on")
+    guard_on = st.toggle("Action Guard (authorise what it does)", key="guard_on")
     mode = st.radio("LLM mode", list(MODES), index=list(MODES).index(settings.llm_mode), format_func=MODES.get)
     if st.button("Run", type="primary", width='stretch'):
         with st.spinner("Running baseline and protected agents..."):
             start_run(spec, request, mode, guard_on, firewall_on)
+
+    # One-click demo path (the 5-minute script): each beat sets the scenario and the layer toggles.
+    st.divider()
+    st.caption("Demo path")
+    for label, scenario_id, fw, guard in DEMO_PATH:
+        if scenario_id in scenarios:
+            st.button(label, key=f"demo-{label}", width="stretch", on_click=_apply_demo_beat,
+                      args=(scenario_id, fw, guard))
 
 st.title("AgentGuard")
 st.caption("Unprotected vs protected agent, side by side: Content Firewall (input) + Action Guard "
