@@ -3,11 +3,16 @@
 A prompt-injection shield for tool-using RAG agents (hackathon PS3).
 Design: [ARCHITECTURE.md](ARCHITECTURE.md) · [THREAT_MODEL.md](THREAT_MODEL.md) · [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
-**Status: milestone M1 (in progress).** The vulnerable system from M0, plus the attack/benign suites
-and the evaluation harness. **No defences exist yet** — the threat is measured before anything is built
-to stop it. Suite so far: 15 attacks (11 dev + 4 unseen, across all 5 categories) and 10 benign tasks
-(clean, tool-using, looks-scary-but-legit, ambiguous). The full 28-attack / 20-benign set and the live
-baseline gate run (D2: baseline hijacked >= 70%) are the remaining M1 steps.
+**Status: milestone M1.** The vulnerable system from M0, plus the attack/benign suites and the
+evaluation harness. **No defences exist yet** — the threat is measured before anything is built to
+stop it. Suite: 19 attacks (15 dev + 4 unseen, across all 5 categories) and 13 benign tasks
+(clean, tool-using, looks-scary-but-legit, ambiguous).
+
+Measured baseline (`gpt-oss-20b`, repeats=1): **ASR 53%** (10/19) and **benign completion 92%**.
+The agent is reliably hijacked by fake-system and social-engineering-style injections but resists
+crude overrides and encoded payloads. We keep this model and report ~53% honestly rather than
+tune the number; see [docs/m1-baseline/DECISION.md](docs/m1-baseline/DECISION.md). Latest results
+and per-category breakdown live in [docs/m1-baseline/](docs/m1-baseline/).
 
 ## Setup (Windows, PowerShell or Git Bash)
 

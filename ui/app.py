@@ -24,7 +24,8 @@ from agentguard.runner import run_scenario  # noqa: E402
 
 st.set_page_config(page_title="AgentGuard", layout="wide")
 
-MODES = {"record": "Live (Groq), recorded for replay", "replay": "Replay (offline, recorded runs)",
+MODES = {"auto": "Auto (reuse recorded runs; call Groq only for new)",
+         "record": "Live (Groq), recorded for replay", "replay": "Replay (offline, recorded runs)",
          "off": "Live (Groq), not recorded"}
 
 

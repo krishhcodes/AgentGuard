@@ -36,7 +36,9 @@ def _path_from_env(name: str, default: Path) -> Path:
 
 
 def load_settings(llm_mode: str | None = None) -> Settings:
-    mode = llm_mode or os.environ.get("AGENTGUARD_LLM_MODE", "record")
+    # Default "auto": reuse recorded runs, call the provider only for new/changed requests.
+    # Safer on a metered free tier than "record" (which always calls live).
+    mode = llm_mode or os.environ.get("AGENTGUARD_LLM_MODE", "auto")
     if mode not in LLM_MODES:
         raise ValueError(f"llm_mode must be one of {LLM_MODES}, got {mode!r}")
     return Settings(
