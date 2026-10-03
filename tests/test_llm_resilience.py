@@ -91,7 +91,9 @@ def test_load_groq_keys_dedupes_and_orders(monkeypatch):
     from agentguard.llm import load_groq_keys
 
     monkeypatch.setattr("agentguard.llm.dotenv_values", lambda path: {})
-    for n in ("GROQ_API_KEY", "GROQ_API_KEY1", "GROQ_API_KEY_2", "GROQ_API_KEYS"):
+    names = ["GROQ_API_KEY", "GROQ_API_KEYS"] + [f"GROQ_API_KEY{i}" for i in range(1, 9)] \
+        + [f"GROQ_API_KEY_{i}" for i in range(1, 9)]
+    for n in names:  # clear the developer's real multi-key env so only the test's keys count
         monkeypatch.delenv(n, raising=False)
     monkeypatch.setenv("GROQ_API_KEY", "k0")
     monkeypatch.setenv("GROQ_API_KEYS", "k0, k1 k2")

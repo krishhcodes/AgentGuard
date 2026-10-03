@@ -112,9 +112,13 @@ _KEY_RING: _KeyRing | None = None
 
 
 def groq_key_ring() -> _KeyRing:
+    """Process-wide ring, rebuilt only when the configured key set changes. Rebuilding on change
+    keeps the rotation cursor across the many short-lived clients in one eval run, while staying
+    correct if the environment is reconfigured (e.g. between tests)."""
     global _KEY_RING
-    if _KEY_RING is None:
-        _KEY_RING = _KeyRing(load_groq_keys())
+    keys = load_groq_keys()
+    if _KEY_RING is None or _KEY_RING.keys != keys:
+        _KEY_RING = _KeyRing(keys)
     return _KEY_RING
 
 

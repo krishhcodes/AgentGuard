@@ -107,6 +107,7 @@ def cmd_doctor(args) -> int:
         return 1
     print(f"ok    {len(keys)} Groq key(s) configured"
           + (f" (~{len(keys) * 200}k tokens/day across the free tier)" if len(keys) > 1 else ""))
+    os.environ["GROQ_API_KEY"] = keys[0]  # the groq sdk reads this; keys may be set only via GROQ_API_KEYS
     try:
         from groq import Groq
 
@@ -160,7 +161,9 @@ def cmd_eval(args) -> int:
         progress=lambda line: print(line, flush=True),
     )
     write_summary_csv(records, out_dir / "summary.csv")
-    markdown = render_markdown(records)
+    guarded = any(c in configs for c in ("guard_only", "full", "compromised_agent"))
+    title = "AgentGuard evaluation (M2: guard)" if guarded else "Baseline evaluation (M1)"
+    markdown = render_markdown(records, title=title)
     (out_dir / "RESULTS.md").write_text(markdown, encoding="utf-8")
     print("\n" + markdown)
     print(f"Artifacts: {out_dir}")

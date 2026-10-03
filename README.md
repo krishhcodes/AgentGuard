@@ -14,11 +14,19 @@ harmful action with a logged reason and the legitimate task still finishes — n
 needed yet (that is the Content Firewall, M5). Taint/data-flow rules (confidential-content egress)
 arrive in M4; M2's rules cover unauthorised recipients, tools, paths and writes.
 
-Measured baseline from M1 (`gpt-oss-20b`, repeats=1): **ASR 53%** (10/19), **benign completion 92%**;
-kept honestly rather than tuned (see [docs/m1-baseline/DECISION.md](docs/m1-baseline/DECISION.md)).
-The M2 defence is verified offline (114 tests, incl. a hijacked-agent block of the canonical attack,
-per-rule tables, the P1 scope-isolation and P3 bypass tests, and interrupt/resume); run
-`agentguard eval --configs baseline,guard_only,compromised_agent` for the measured guard numbers.
+**Measured (`gpt-oss-20b`, dev split, repeats=1; see [docs/m2-guard/](docs/m2-guard/)):**
+
+| config | dev ASR | benign completion | benign FPR |
+|---|---|---|---|
+| baseline | **60%** (9/15) | 92% | 0% |
+| guard_only | **0%** (0/15) | 92% | **0%** |
+| compromised_agent (guard alone) | 0% | — | — — catch **100%** on C1-C5 |
+
+The guard eliminates every attack the real model fell for, with **no false positives** and no task
+regression; `compromised_agent` (the model scripted to always emit the attack's calls) shows the guard
+catches **100%** even with model luck removed. Baseline is kept honestly at ~60% rather than tuned
+(see [docs/m1-baseline/DECISION.md](docs/m1-baseline/DECISION.md)). Confidential-content egress and
+taint attribution are M4; the content firewall is M5. Verified by 121 offline tests plus this live run.
 
 ## Setup (Windows, PowerShell or Git Bash)
 

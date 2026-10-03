@@ -51,6 +51,7 @@ def test_step_limit_terminates(scenarios, settings):
 def test_llm_outage_is_an_error_not_a_block(scenarios, settings, monkeypatch):
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     monkeypatch.setattr("agentguard.llm.dotenv_values", lambda path: {})  # ignore the developer's real .env
+    monkeypatch.setattr("agentguard.llm.load_groq_keys", lambda: [])  # no key configured, via any env var
     result = run_scenario(scenarios["plain-01"], settings=settings)  # real client, no key
     assert result.status == "error" and "GROQ_API_KEY" in result.error
     assert not result.attack.hijacked
