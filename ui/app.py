@@ -106,6 +106,11 @@ def render_decisions(events) -> None:
         st.markdown(f"{emoji} **{label}** `{d['tool']}`{rules}")  # labels/rules are fixed, safe
         if d["reason"]:
             st.text(d["reason"])  # reason embeds attacker-influenced args -> plain text only
+        for ev in d.get("evidence", []):  # M4: attribute the decision to the source document/view
+            src, snip = ev.get("source"), ev.get("snippet")
+            if src:
+                line = f"triggered by: {src}" + (f" ({ev['method']})" if ev.get("method") else "")
+                st.text(line + (f" — {snip}" if snip else ""))  # source + snippet are untrusted
 
 
 def render_verdict(result) -> None:

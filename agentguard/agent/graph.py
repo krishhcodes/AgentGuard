@@ -23,6 +23,9 @@ _CHECKPOINT_SERDE = JsonPlusSerializer(allowed_msgpack_modules=[
     ("agentguard.scope.models", "Scope"),
     ("agentguard.guard.rules", "GuardDecision"),
     ("agentguard.guard.rules", "RuleHit"),
+    ("agentguard.guard.taint", "TaintLedger"),
+    ("agentguard.guard.taint", "LedgerEntry"),
+    ("agentguard.guard.taint", "ConfidentialBody"),
 ])
 
 

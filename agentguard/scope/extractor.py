@@ -22,7 +22,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from agentguard.llm import LLMUnavailable
 from agentguard.policy import Policy
-from agentguard.scope.models import Ambiguity, Scope, ScopeMeta, WriteTarget
+from agentguard.scope.models import Ambiguity, EgressFlow, Scope, ScopeMeta, WriteTarget
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PATH_RE = re.compile(r"\b(?:quotes|confidential|web)/[A-Za-z0-9_./-]+")
@@ -140,6 +140,14 @@ def _validate(
             field="recipient", text="unresolved recipient",
             reason="the user asked to send something but named no address or known alias"))
 
+    # Explicitly requested confidential -> recipient flows: only when the user named BOTH the
+    # confidential file and a recipient (plus a send verb). These are the ONLY confidential egresses
+    # the guard allows without asking (CONFIDENTIAL_EGRESS, M4).
+    egress_flows = (
+        [EgressFlow(source=src, recipient=rcpt) for src in pre.confidential_paths for rcpt in recipients]
+        if (pre.confidential_paths and recipients and "send_email" in allowed) else []
+    )
+
     return Scope(
         scope_id=scope_id,
         task_summary=str(proposal.get("task_summary") or "procurement task")[:300],
@@ -149,7 +157,7 @@ def _validate(
         recipients=recipients,
         recipient_domains=pre.domains,
         write_targets=write_targets,
-        egress_flows=[],  # confidential->recipient flows are populated in M4
+        egress_flows=egress_flows,
         ambiguities=ambiguities,
         meta=ScopeMeta(model=model_name, latency_ms=round(latency_ms, 1),
                        fallback_used=fallback_used, dropped_items=dropped),

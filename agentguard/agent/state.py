@@ -13,6 +13,7 @@ from langgraph.graph.message import add_messages
 from agentguard.audit import AuditLogger
 from agentguard.config import Settings
 from agentguard.guard.rules import GuardDecision
+from agentguard.guard.taint import TaintLedger
 from agentguard.rag.retriever import Retriever
 from agentguard.sandbox import Sandbox, ToolRegistry
 from agentguard.scope.models import Scope
@@ -66,6 +67,7 @@ class AgentState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
     pending_untrusted: list[RawSegment]  # U; replaced (not appended) by each producer
     scope: Scope | None  # T2; set by extract_scope when guard is on
+    ledger: TaintLedger | None  # provenance + confidential-flow memory (guard on), M4
     decisions: list[GuardDecision]  # guard verdicts for the latest proposed calls (replaced each turn)
     step: int
     status: str  # ok | step_limit | error

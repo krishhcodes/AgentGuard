@@ -20,8 +20,10 @@ from agentguard.agent.state import AgentState, RawSegment, Runtime
 from agentguard.audit import AuditEvent
 from agentguard.audit.events import preview_args, truncate
 from agentguard.guard import rules as guard_rules
+from agentguard.guard.taint import TaintLedger
 from agentguard.llm import LLMUnavailable
 from agentguard.scope import extract_scope as run_scope_extractor
+from agentguard.text import normalize
 
 RETRIEVE_TOOL = "retrieve_context"
 RETRIEVE_CALL_ID = "ctx-0"
@@ -46,7 +48,9 @@ def extract_scope(state: AgentState, config: RunnableConfig) -> dict:
               "fallback_used": scope.meta.fallback_used, "dropped_items": scope.meta.dropped_items},
         latency_ms={"scope": scope.meta.latency_ms},
     ))
-    return {"scope": scope, "timings": {"scope": [scope.meta.latency_ms]}}
+    ledger = TaintLedger(user_norm=normalize(state["user_request"])[0],
+                         directory=list(rt.policy.directory.values()))
+    return {"scope": scope, "ledger": ledger, "timings": {"scope": [scope.meta.latency_ms]}}
 
 
 def extract_scope_fn(state: AgentState, rt: Runtime):
@@ -83,7 +87,9 @@ def _render_group(segments: list[RawSegment]) -> str:
 
 
 def ingest_untrusted(state: AgentState, config: RunnableConfig) -> dict:
-    """M0: raw passthrough. Untrusted content enters the context unmodified (the vulnerability)."""
+    """Raw passthrough into the context (the M0 vulnerability is preserved). When the guard is on,
+    every untrusted segment is also recorded in the Taint Ledger for provenance and confidential-flow
+    tracking (M4). No scanning happens here; the Content Firewall is M5."""
     groups: dict[str, list[RawSegment]] = {}
     for seg in state["pending_untrusted"]:
         groups.setdefault(seg["tool_call_id"], []).append(seg)
@@ -98,7 +104,14 @@ def ingest_untrusted(state: AgentState, config: RunnableConfig) -> dict:
         for tc in last_ai.tool_calls:
             if tc["id"] not in answered and tc["name"] == RETRIEVE_TOOL:
                 messages.append(ToolMessage(content="No relevant documents found.", tool_call_id=tc["id"], name=RETRIEVE_TOOL))
-    return {"messages": messages, "pending_untrusted": []}
+    out: dict = {"messages": messages, "pending_untrusted": []}
+    if state["flags"]["guard"]:
+        ledger = state.get("ledger") or TaintLedger()
+        for seg in state["pending_untrusted"]:
+            ledger.record_segment(text=seg["text"], source=seg["source"],
+                                  channel=seg["channel"], confidential=seg["confidential"])
+        out["ledger"] = ledger
+    return out
 
 
 def _is_blank(message: AIMessage) -> bool:
@@ -151,7 +164,7 @@ def action_guard(state: AgentState, config: RunnableConfig) -> dict:
     guard_times: list[float] = []
     for call in _proposed_calls(state):
         started = time.perf_counter()
-        decision = guard_rules.decide(call, scope, rt.policy)
+        decision = guard_rules.decide(call, scope, rt.policy, state.get("ledger"))
         decision.latency_ms = round((time.perf_counter() - started) * 1000, 3)
         guard_times.append(decision.latency_ms)
         decisions.append(decision)
@@ -206,6 +219,7 @@ def execute_tools(state: AgentState, config: RunnableConfig) -> dict:
     last = state["messages"][-1]
     guarded = state["flags"]["guard"]
     by_call = {d.call_id: d for d in state.get("decisions", [])} if guarded else {}
+    ledger = state.get("ledger") if guarded else None
     segments: list[RawSegment] = []
     for tc in last.tool_calls:
         if guarded:
@@ -229,6 +243,8 @@ def execute_tools(state: AgentState, config: RunnableConfig) -> dict:
         else:
             result = rt.registry.execute(rt.sandbox, tc["name"], tc["args"])
             rt.sandbox.state.executed_calls[key] = truncate(result, 200)
+            if ledger is not None:  # record egress so the next call's guard sees chunked leaks
+                _record_egress(ledger, tc["name"], tc["args"])
         elapsed = (time.perf_counter() - started) * 1000
         confidential = False
         source = f"tool:{tc['name']}"
@@ -261,7 +277,21 @@ def execute_tools(state: AgentState, config: RunnableConfig) -> dict:
                 tool_name=tc["name"],
             )
         )
-    return {"pending_untrusted": segments}
+    out: dict = {"pending_untrusted": segments}
+    if ledger is not None:
+        out["ledger"] = ledger
+    return out
+
+
+def _record_egress(ledger: TaintLedger, name: str, args: dict) -> None:
+    if name == "send_email":
+        ledger.record_egress(str(args.get("to", "")).lower(), f"{args.get('subject', '')}\n{args.get('body', '')}")
+    elif name == "search_web":
+        ledger.record_egress("web", str(args.get("query", "")))
+    elif name == "write_record":
+        fields = args.get("fields") or {}
+        ledger.record_egress(f"{args.get('table')}/{args.get('record_id')}",
+                             " ".join(str(v) for v in fields.values()))
 
 
 def finalize(state: AgentState, config: RunnableConfig) -> dict:

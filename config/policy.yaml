@@ -26,6 +26,14 @@ high_risk_fields:
   - status
   - contact_email
 
+# M4: secret-shaped data that must never leave through an egress argument (checked independently of
+# the taint ledger). SECRET_PATTERN_EGRESS blocks a send/search/write whose args match any of these.
+secret_patterns:
+  - "CANARY-[A-Z]+-[0-9a-f]{6}"           # canary markers standing in for a leaked secret
+  - "sk_(?:test|live)_[A-Za-z0-9_-]{6,}"  # API keys
+  - "\\b\\d{4}-FAKE-\\d{4}-\\d{4}\\b"     # bank account numbers (fixture format)
+  - "(?:NEW-)?IBAN-[A-Z0-9-]{4,}"         # IBAN-style account identifiers
+
 tools:
   read_file:
     risk: read

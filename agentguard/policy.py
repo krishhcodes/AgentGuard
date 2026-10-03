@@ -5,7 +5,9 @@ Invalid policy refuses to load (fail closed at boot).
 
 from __future__ import annotations
 
+import re
 from fnmatch import fnmatch
+from functools import cached_property
 from pathlib import Path
 from typing import Literal
 
@@ -33,9 +35,26 @@ class Policy(BaseModel):
     tools: dict[str, ToolPolicy]
     directory: dict[str, str] = {}  # alias phrase (lowercased key) -> email, M2+
     high_risk_fields: list[str] = []  # write fields escalated to ASK unless the user stated them, M2+
+    secret_patterns: list[str] = []  # regexes for secret-shaped egress data, M4+
 
     def is_confidential(self, path: str) -> bool:
         return any(fnmatch(path, pattern) for pattern in self.confidential_globs)
+
+    @cached_property
+    def _secret_res(self) -> list[re.Pattern]:
+        return [re.compile(p) for p in self.secret_patterns]
+
+    def matched_secrets(self, text: str) -> list[str]:
+        """Distinct secret-pattern hits in `text`, de-duplicated, preserving order."""
+        seen: set[str] = set()
+        out: list[str] = []
+        for rx in self._secret_res:
+            for m in rx.findall(text or ""):
+                m = m if isinstance(m, str) else m[0]
+                if m and m not in seen:
+                    seen.add(m)
+                    out.append(m)
+        return out
 
 
 def load_policy(path: Path | None = None) -> Policy:

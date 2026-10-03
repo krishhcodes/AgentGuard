@@ -17,10 +17,12 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from agentguard.audit.events import truncate
+from agentguard.guard.taint import TaintLedger
 from agentguard.policy import Policy
 from agentguard.sandbox.env import resolve_vpath
 from agentguard.sandbox.tools import TOOL_ARG_MODELS
 from agentguard.scope.models import Scope
+from agentguard.text import text_views
 
 ALLOW, ASK, BLOCK = "ALLOW", "ASK", "BLOCK"
 _RANK = {ALLOW: 0, ASK: 1, BLOCK: 2}
@@ -152,7 +154,67 @@ _CHECKS = {"read_file": _check_read, "send_email": _check_email,
            "search_web": _check_search, "write_record": _check_write}
 
 
-def evaluate_call(call: dict, scope: Scope, policy: Policy) -> list[RuleHit]:
+def _egress_view(tool: str, args: dict, scope: Scope) -> dict | None:
+    """Per-tool egress descriptor: the text leaving, the sink key (for cumulative checks), the
+    identifying argument (for provenance), and whether the sink is authorised."""
+    if tool == "send_email":
+        to = str(args.get("to", ""))
+        return {"text": f"{to}\n{args.get('subject', '')}\n{args.get('body', '')}",
+                "sink": to.lower(), "value": to, "recipient": to, "authorised": _recipient_ok(to, scope)}
+    if tool == "search_web":
+        return {"text": str(args.get("query", "")), "sink": "web", "value": "",
+                "recipient": None, "authorised": False}  # the web is always an external sink
+    if tool == "write_record":
+        table, rid = args.get("table"), args.get("record_id")
+        fields = args.get("fields") or {}
+        in_scope = any(w.table == table and (w.record_id is None or w.record_id == rid)
+                       for w in scope.write_targets)
+        return {"text": " ".join(str(v) for v in fields.values()), "sink": f"{table}/{rid}",
+                "value": str(rid or ""), "recipient": None, "authorised": in_scope}
+    return None
+
+
+def _check_flow(tool: str, args: dict, scope: Scope, policy: Policy, ledger: TaintLedger) -> list[RuleHit]:
+    """M4 data-flow rules for egress/write tools: SECRET_PATTERN_EGRESS, CONFIDENTIAL_EGRESS,
+    ARG_FROM_UNTRUSTED_SOURCE."""
+    eg = _egress_view(tool, args, scope)
+    if eg is None:
+        return []
+    hits: list[RuleHit] = []
+    all_text = "\n".join(text_views(eg["text"]).all_texts())
+
+    secrets = policy.matched_secrets(all_text)
+    if secrets:
+        hits.append(RuleHit(rule_id="SECRET_PATTERN_EGRESS", decision=BLOCK, severity="high",
+                            reason=f"Outbound {tool} argument contains secret-shaped data: {secrets[:3]}.",
+                            evidence=[{"secrets": secrets[:3]}]))
+
+    flow = ledger.confidential_overlap(eg["text"], sink=eg["sink"])
+    if flow.matched or ledger.has_confidential_read:
+        flow_authorised = eg["recipient"] is not None and any(
+            f.recipient.lower() == eg["recipient"].lower() for f in scope.egress_flows)
+        src = flow.source or (ledger.confidential_bodies[0].source if ledger.confidential_bodies else "confidential")
+        ev = [{"source": src, "method": flow.method or "session-read", "snippet": truncate(flow.snippet, 120)}]
+        if not eg["authorised"]:
+            hits.append(RuleHit(rule_id="CONFIDENTIAL_EGRESS", decision=BLOCK, severity="high",
+                                reason=f"This {tool} would send confidential data ({src}) to an unauthorised sink.",
+                                evidence=ev))
+        elif not flow_authorised:
+            hits.append(RuleHit(rule_id="CONFIDENTIAL_EGRESS", decision=ASK, severity="warn",
+                                reason=f"This {tool} sends confidential data ({src}); the user did not authorise this flow.",
+                                evidence=ev))
+
+    if eg["value"]:
+        prov = ledger.origin_of(eg["value"])
+        if prov.origin.startswith("untrusted:"):
+            hits.append(RuleHit(rule_id="ARG_FROM_UNTRUSTED_SOURCE", decision=ASK, severity="warn",
+                                reason=f"The {tool} target {eg['value']!r} came from untrusted content, "
+                                       f"not the user ({prov.origin}).",
+                                evidence=prov.evidence))
+    return hits
+
+
+def evaluate_call(call: dict, scope: Scope, policy: Policy, ledger: TaintLedger | None = None) -> list[RuleHit]:
     """Run the rule catalogue for one proposed call and return every hit (lattice applied later)."""
     tool, args = call["name"], call.get("args") or {}
     model = TOOL_ARG_MODELS.get(tool)
@@ -178,11 +240,13 @@ def evaluate_call(call: dict, scope: Scope, policy: Policy) -> list[RuleHit]:
                             reason=f"Use of {tool} is ambiguous for this task; confirm.",
                             evidence=[{"tool": tool}]))
     hits.extend(_CHECKS[tool](args, scope, policy))
+    if ledger is not None and policy.tools[tool].risk in ("egress", "write"):
+        hits.extend(_check_flow(tool, args, scope, policy, ledger))
     return hits
 
 
-def decide(call: dict, scope: Scope, policy: Policy) -> GuardDecision:
-    hits = evaluate_call(call, scope, policy)
+def decide(call: dict, scope: Scope, policy: Policy, ledger: TaintLedger | None = None) -> GuardDecision:
+    hits = evaluate_call(call, scope, policy, ledger)
     decision = ALLOW
     for h in hits:
         if _RANK[h.decision] > _RANK[decision]:

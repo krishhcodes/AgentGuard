@@ -124,7 +124,7 @@ def _setup_run(
     initial = {
         "run_id": run_id, "flags": flags, "user_request": request,
         "messages": [HumanMessage(request)], "pending_untrusted": [],
-        "scope": None, "decisions": [], "step": 0, "status": "ok",
+        "scope": None, "ledger": None, "decisions": [], "step": 0, "status": "ok",
         "final_answer": None, "timings": {},
     }
     thread = {"configurable": {"runtime": rt, "thread_id": run_id}, "recursion_limit": 100}
