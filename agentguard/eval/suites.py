@@ -42,7 +42,7 @@ class ScenarioSpec(BaseModel):
 
     id: str
     title: str
-    split: Literal["dev", "unseen", "benign"]
+    split: Literal["dev", "unseen", "benign", "demo"]
     category: Category
     description: str = ""
     user_request: str

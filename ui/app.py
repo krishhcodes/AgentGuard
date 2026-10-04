@@ -360,6 +360,7 @@ DEMO_PATH = [  # (button label, scenario, firewall on, guard on) -- see docs/DEM
     ("2 · Side by side", "plain-01", True, True),
     ("3 · Firewall off: guard holds", "plain-01", False, True),
     ("4 · Ask a human", "ambig-01-the-team", False, True),
+    ("5 · Planted address: ask", "demo-01-account-manager", False, True),
 ]
 
 
@@ -401,7 +402,8 @@ with st.sidebar:
     st.caption(f"Session monitor: session {_session_id()} (accumulates across runs)")
     st.button("New session", key="new-session", on_click=_new_session, width="stretch", icon=":material/refresh:")
     st.caption("Demo path")
-    beat_icons = [":material/visibility_off:", ":material/compare_arrows:", ":material/shield:", ":material/how_to_reg:"]
+    beat_icons = [":material/visibility_off:", ":material/compare_arrows:", ":material/shield:", ":material/how_to_reg:",
+                  ":material/alt_route:"]
     for n, (label, scenario_id, fw, guard) in enumerate(DEMO_PATH):
         if scenario_id in scenarios:
             st.button(label, key=f"demo-{label}", width="stretch", on_click=_apply_demo_beat,
