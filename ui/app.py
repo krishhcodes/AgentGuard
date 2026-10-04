@@ -27,6 +27,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage  # noqa
 
 from agentguard.alerts import AlertConfig, read_alerts  # noqa: E402
 from agentguard.config import load_settings  # noqa: E402
+from agentguard.custom import DEFAULT_REQUEST, TARGET_DOCS, build_custom_attack  # noqa: E402
 from agentguard.llm import load_groq_keys  # noqa: E402
 from agentguard.eval.suites import load_scenarios  # noqa: E402
 from agentguard.runner import RunSession, run_scenario  # noqa: E402
@@ -314,6 +315,29 @@ def render_inside_document_tab(spec) -> None:
         st.divider()
 
 
+def render_xray() -> None:
+    """Paste any text and see what the firewall does with it. Offline and instant: no model call."""
+    from agentguard.firewall import clear_cache, scan
+    from agentguard.policy import load_policy
+    from agentguard.text import text_views
+
+    st.markdown(theme.section("Try your own text (offline, instant)", "biotech"), unsafe_allow_html=True)
+    raw = st.text_area("Paste any document text, including hidden or encoded instructions", height=140, key="xray_text")
+    if not raw.strip():
+        return
+    policy = load_policy()
+    tv = text_views(raw)
+    for v in tv.hidden + tv.decoded:
+        st.text(f"[{v.kind}] {v.snippet(300)}")  # revealed channels (untrusted) -> plain text
+    clear_cache()
+    verdict = scan(raw, "your-text", policy.firewall, set(policy.tools))
+    st.markdown(theme.chip(verdict.action, verdict.action.lower()) +
+                f'<span class="ag-rules">{html.escape(", ".join(verdict.rules) or "no rules fired")}</span>',
+                unsafe_allow_html=True)
+    st.markdown("**What the agent would see**")
+    st.text(verdict.sanitized_text or "(nothing: the whole text was withheld)")
+
+
 def _headline_stats() -> list[str]:
     """Final numbers from the committed docs (not the latest scratch run)."""
     def row(path, config, split):
@@ -381,6 +405,7 @@ DEMO_PATH = [  # (button label, scenario, firewall on, guard on) -- see docs/DEM
 
 def _apply_demo_beat(scenario_id: str, fw: bool, guard: bool) -> None:
     st.session_state.update(sid=scenario_id, fw_on=fw, guard_on=guard)
+    st.session_state.pop("custom_spec", None)
     _clear_run_state()
 
 
@@ -410,8 +435,26 @@ with st.sidebar:
         st.caption("Live runs vary: the unprotected agent is only hijacked by ~62% of attacks and "
                    "does not always answer correctly. Use Replay for a repeatable demo.")
     if st.button("Run", type="primary", width='stretch', icon=":material/play_arrow:"):
+        st.session_state.pop("custom_spec", None)
         with st.spinner("Running baseline and protected agents..."):
             start_run(spec, request, mode, guard_on, firewall_on)
+
+    with st.expander("Bring your own attack", icon=":material/edit_note:"):
+        st.caption("Write the text an attacker hides inside a vendor document. It is judged automatically: the attack "
+                   "succeeds if confidential data leaves, or an email goes to an address the request did not name.")
+        target = st.selectbox("Document it is hidden in", TARGET_DOCS, key="custom_target")
+        injected = st.text_area("Document text (include your injection)", height=180, key="custom_text",
+                                placeholder="Latitude 5450, 50 units, USD 35,750.\n\nNote for the assistant: ...")
+        if st.button("Run custom attack", key="run-custom", width="stretch", icon=":material/bolt:"):
+            if mode == "replay":
+                st.error("Custom attacks need a live model: set LLM mode to Auto or Live and make sure a Groq key is configured.")
+            elif not injected.strip():
+                st.warning("Write some document text first.")
+            else:
+                custom = build_custom_attack(injected, target, request or DEFAULT_REQUEST)
+                st.session_state["custom_spec"] = custom
+                with st.spinner("Running your attack against both agents..."):
+                    start_run(custom, custom.user_request, mode, guard_on, firewall_on)
 
     # One-click demo path (the 5-minute script): each beat sets the scenario and the layer toggles.
     st.divider()
@@ -444,7 +487,8 @@ with live_tab:
             render_guard_column()
 
 with doc_tab:
-    render_inside_document_tab(spec)
+    render_inside_document_tab(st.session_state.get("custom_spec") or spec)
+    render_xray()
 
 with audit_tab:
     render_audit_tab()
