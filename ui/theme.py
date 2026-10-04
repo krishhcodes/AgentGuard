@@ -1,4 +1,4 @@
-"""AgentGuard UI theme: tonal dark surfaces, indigo-violet accent, soft cards, pill controls (Stitch-style).
+"""AgentGuard UI theme: warm paper, ink outlines, sticker shadows, friendly serif headings, real icons.
 
 Everything here is presentation. Only FIXED labels are ever rendered as HTML; any text that can be
 influenced by an attacker (reasons, arguments, sources, snippets) stays plain text in app.py.
@@ -11,101 +11,135 @@ import html
 import streamlit as st
 
 CSS = """
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500..700&family=DM+Sans:wght@400;500;600;700&display=swap');
 
 :root{
-  --bg:#0A0C16; --surface:#11142A; --surface2:#171B36; --line:rgba(140,150,255,.16);
-  --text:#E8EAF8; --muted:#9AA1C7; --accent:#7C6CFF; --accent2:#4CC9F0;
-  --ok:#3DDC97; --bad:#FF5D73; --warn:#FFB454; --violet:#B28DFF;
+  --paper:#FBF6EC; --card:#FFFFFF; --ink:#2A2521; --muted:#7B7167; --line:#E8DFCF; --dot:#E6DAC4;
+  --coral:#F26B4F; --coral-soft:#FFE5DD; --sage:#3F9A6F; --sage-soft:#E2F3E9;
+  --sun:#F2B33D; --sun-soft:#FFF0CC; --sky:#4C8FC4; --sky-soft:#E0EEF9; --brick:#D2433A; --brick-soft:#FCE3DF;
 }
-html, body, [class*="css"], .stApp{ font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif !important; }
+html, body, [class*="css"], .stApp, .stMarkdown, p, li, label, button, input, textarea{
+  font-family:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif !important; }
 .stApp{
-  background:
-    radial-gradient(900px 480px at 8% -8%, rgba(124,108,255,.20), transparent 60%),
-    radial-gradient(760px 420px at 100% 0%, rgba(76,201,240,.12), transparent 55%),
-    var(--bg);
-  color:var(--text);
+  color:var(--ink);
+  background-color:var(--paper);
+  background-image:radial-gradient(var(--dot) 1.2px, transparent 1.2px);
+  background-size:26px 26px;
 }
+h1,h2,h3,.ag-serif{ font-family:'Fraunces',Georgia,'Times New Roman',serif !important; color:var(--ink); letter-spacing:-.01em; }
+.ms{ font-family:'Material Symbols Rounded'; font-weight:normal; font-style:normal; font-size:1.3em; line-height:1;
+  letter-spacing:normal; text-transform:none; display:inline-block; white-space:nowrap; direction:ltr;
+  font-feature-settings:'liga'; -webkit-font-smoothing:antialiased; vertical-align:-0.22em; }
+
 /* chrome */
 #MainMenu, footer, [data-testid="stToolbar"], [data-testid="stDecoration"]{ display:none !important; }
 header[data-testid="stHeader"]{ background:transparent; }
-.block-container{ padding-top:1.4rem; max-width:1280px; }
+.block-container{ padding-top:2.2rem; padding-bottom:4rem; max-width:1240px; }
+[data-testid="stVerticalBlock"]{ gap:1.15rem; }
 
 /* sidebar */
-section[data-testid="stSidebar"]{ background:linear-gradient(180deg,#0F1226,#0B0D1C); border-right:1px solid var(--line); }
-section[data-testid="stSidebar"] h2, section[data-testid="stSidebar"] h3{ font-size:.78rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:600; }
-.ag-brand{ display:flex; align-items:center; gap:.7rem; padding:.2rem 0 1rem; }
-.ag-logo{ width:38px; height:38px; border-radius:12px; display:grid; place-items:center; font-size:1.2rem;
-  background:linear-gradient(135deg,var(--accent),var(--accent2)); box-shadow:0 8px 24px rgba(124,108,255,.45); }
-.ag-brand b{ font-size:1.05rem; letter-spacing:.01em; } .ag-brand span{ display:block; font-size:.72rem; color:var(--muted); }
+section[data-testid="stSidebar"]{ background:#F5EEDF; border-right:2px solid var(--ink); }
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"]{ padding:1.6rem 1.3rem 2rem; }
+section[data-testid="stSidebar"] h2{ font-family:'DM Sans',sans-serif !important; font-size:.76rem; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); font-weight:700; margin-top:.4rem; }
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{ gap:.9rem; }
+.ag-brand{ display:flex; align-items:center; gap:.8rem; padding:.2rem 0 1.2rem; border-bottom:2px dashed #D9CDB6; margin-bottom:.4rem; }
+.ag-logo{ width:46px; height:46px; border-radius:15px; display:grid; place-items:center; background:var(--coral); color:#fff;
+  border:2px solid var(--ink); box-shadow:3px 3px 0 var(--ink); transform:rotate(-4deg); }
+.ag-logo .ms{ font-size:1.7rem; }
+.ag-brand b{ font-family:'Fraunces',serif; font-size:1.35rem; display:block; line-height:1.1; }
+.ag-brand span.t{ font-size:.82rem; color:var(--muted); }
 
 /* hero */
-.ag-hero{ padding:1.6rem 1.8rem; border-radius:24px; border:1px solid var(--line);
-  background:linear-gradient(135deg, rgba(124,108,255,.18), rgba(76,201,240,.07) 55%, rgba(17,20,42,.6));
-  box-shadow:0 20px 60px rgba(0,0,0,.35); margin-bottom:1.1rem; }
-.ag-hero h1{ margin:0; font-size:2.35rem; font-weight:800; letter-spacing:-.02em;
-  background:linear-gradient(90deg,#fff,#C9C2FF 55%,#8FE3FF); -webkit-background-clip:text; background-clip:text; color:transparent; }
-.ag-hero p{ margin:.35rem 0 1rem; color:var(--muted); font-size:1.02rem; max-width:62ch; }
-.ag-flow{ display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; }
-.ag-node{ padding:.38rem .8rem; border-radius:999px; font-size:.78rem; font-weight:600; border:1px solid var(--line); background:rgba(255,255,255,.04); }
-.ag-node.untrusted{ border-color:rgba(255,93,115,.45); color:#FFB3BD; background:rgba(255,93,115,.10); }
-.ag-node.defence{ border-color:rgba(124,108,255,.55); color:#CFC8FF; background:rgba(124,108,255,.16); }
-.ag-node.neutral{ color:var(--text); }
-.ag-arrow{ color:var(--muted); font-size:.8rem; }
+.ag-hero{ position:relative; padding:2rem 2.2rem 1.9rem; border-radius:26px; background:var(--card);
+  border:2px solid var(--ink); box-shadow:7px 7px 0 var(--ink); margin:.3rem 0 1.7rem; }
+.ag-tag{ display:inline-block; font-size:.8rem; font-weight:700; letter-spacing:.06em; padding:.3rem .8rem; border-radius:10px;
+  background:var(--sun); border:2px solid var(--ink); transform:rotate(-2deg); margin-bottom:.9rem; }
+.ag-hero h1{ margin:0 0 .5rem; font-size:3rem; font-weight:700; line-height:1.05; }
+.ag-hero h1 em{ font-style:italic; color:var(--coral); }
+.ag-hero p.lead{ font-size:1.12rem; line-height:1.6; max-width:60ch; color:#4A433C; margin:0 0 1.5rem; }
+.ag-journey{ display:flex; align-items:flex-start; gap:0; flex-wrap:wrap; row-gap:1rem; }
+.ag-step{ display:flex; flex-direction:column; align-items:center; gap:.45rem; width:96px; text-align:center; }
+.ag-bubble{ width:54px; height:54px; border-radius:50%; display:grid; place-items:center; border:2px solid var(--ink); }
+.ag-bubble .ms{ font-size:1.6rem; }
+.ag-bubble.bad{ background:var(--brick-soft); color:var(--brick); } .ag-bubble.def{ background:var(--sage-soft); color:var(--sage); }
+.ag-bubble.neu{ background:var(--sky-soft); color:var(--sky); } .ag-bubble.warn{ background:var(--sun-soft); color:#B07A10; }
+.ag-step small{ font-size:.8rem; font-weight:600; line-height:1.25; color:#4A433C; }
+.ag-link{ flex:1; min-width:18px; max-width:46px; height:0; border-top:2px dashed #BFB29A; margin-top:27px; }
 
 /* tabs */
-.stTabs [data-baseweb="tab-list"]{ gap:.4rem; background:var(--surface); padding:.3rem; border-radius:999px; border:1px solid var(--line); width:fit-content; }
-.stTabs [data-baseweb="tab"]{ border-radius:999px; padding:.45rem 1.05rem; height:auto; color:var(--muted); font-weight:600; }
-.stTabs [aria-selected="true"]{ background:linear-gradient(135deg,var(--accent),#5B8CFF); color:#fff !important; box-shadow:0 6px 18px rgba(124,108,255,.4); }
-.stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"]{ display:none; }
+.stTabs [data-baseweb="tab-list"]{ gap:.3rem; border-bottom:2px solid var(--line); }
+.stTabs [data-baseweb="tab"]{ height:auto; padding:.7rem 1.1rem; color:var(--muted); font-weight:600; border-radius:12px 12px 0 0; }
+.stTabs [data-baseweb="tab"]:hover{ color:var(--ink); background:rgba(242,107,79,.08); }
+.stTabs [aria-selected="true"]{ color:var(--ink) !important; background:var(--coral-soft); }
+.stTabs [data-baseweb="tab-highlight"]{ background:var(--coral); height:3px; }
+.stTabs [data-baseweb="tab-border"]{ display:none; }
 
-/* run columns as cards */
+/* run columns */
 [data-testid="stHorizontalBlock"] > [data-testid="stColumn"], [data-testid="stHorizontalBlock"] > [data-testid="column"]{
-  background:var(--surface); border:1px solid var(--line); border-radius:22px; padding:1.1rem 1.2rem;
-  box-shadow:0 14px 40px rgba(0,0,0,.28); }
-.ag-colhead{ display:flex; align-items:center; gap:.6rem; margin:.1rem 0 .5rem; }
-.ag-dot{ width:12px; height:12px; border-radius:50%; } .ag-dot.bad{ background:var(--bad); box-shadow:0 0 14px var(--bad); } .ag-dot.ok{ background:var(--ok); box-shadow:0 0 14px var(--ok); }
-.ag-colhead h3{ margin:0; font-size:1.25rem; font-weight:700; } .ag-colhead small{ color:var(--muted); font-family:'JetBrains Mono',monospace; }
+  background:var(--card); border:2px solid var(--ink); border-radius:22px; padding:1.5rem 1.6rem 1.7rem; box-shadow:5px 5px 0 var(--ink); }
+[data-testid="stHorizontalBlock"]{ gap:1.6rem; }
+.ag-colhead{ display:flex; align-items:center; gap:.8rem; margin:.1rem 0 .5rem; }
+.ag-badge{ width:44px; height:44px; border-radius:14px; display:grid; place-items:center; border:2px solid var(--ink); }
+.ag-badge.bad{ background:var(--brick-soft); color:var(--brick); } .ag-badge.ok{ background:var(--sage-soft); color:var(--sage); }
+.ag-colhead h3{ margin:0; font-size:1.5rem; line-height:1.1; }
+.ag-colhead small{ display:block; color:var(--muted); font-size:.82rem; font-family:'DM Sans',sans-serif; margin-top:.15rem; }
+.ag-sec{ margin:1.1rem 0 .5rem; font-size:.74rem; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+.ag-sec .ms{ font-size:1.15em; margin-right:.3rem; }
 
 /* chips */
-.ag-chip{ display:inline-block; padding:.18rem .7rem; border-radius:999px; font-size:.74rem; font-weight:700; letter-spacing:.04em; margin-right:.35rem; border:1px solid transparent; }
-.ag-chip.allow, .ag-chip.approved, .ag-chip.pass{ color:#8EF3C5; background:rgba(61,220,151,.13); border-color:rgba(61,220,151,.35); }
-.ag-chip.block, .ag-chip.denied, .ag-chip.quarantine{ color:#FFB3BD; background:rgba(255,93,115,.14); border-color:rgba(255,93,115,.4); }
-.ag-chip.ask, .ag-chip.flag{ color:#FFD9A0; background:rgba(255,180,84,.14); border-color:rgba(255,180,84,.4); }
-.ag-chip.sanitize{ color:#D6C6FF; background:rgba(178,141,255,.16); border-color:rgba(178,141,255,.45); }
-.ag-tool{ font-family:'JetBrains Mono',monospace; font-size:.82rem; color:#CFD3F3; background:rgba(255,255,255,.05); padding:.12rem .45rem; border-radius:8px; }
-.ag-rules{ color:var(--muted); font-size:.78rem; font-family:'JetBrains Mono',monospace; }
-.ag-sec{ margin:.9rem 0 .35rem; font-size:.72rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+.ag-chip{ display:inline-flex; align-items:center; gap:.3rem; padding:.22rem .75rem .22rem .5rem; border-radius:999px; font-size:.78rem; font-weight:700;
+  letter-spacing:.03em; margin:0 .45rem .2rem 0; border:1.5px solid var(--ink); color:var(--ink); }
+.ag-chip .ms{ font-size:1.15em; }
+.ag-chip.allow,.ag-chip.approved,.ag-chip.pass{ background:var(--sage-soft); }
+.ag-chip.block,.ag-chip.denied,.ag-chip.quarantine{ background:var(--brick-soft); }
+.ag-chip.ask,.ag-chip.flag{ background:var(--sun-soft); }
+.ag-chip.sanitize{ background:var(--sky-soft); }
+.ag-tool{ font-family:'JetBrains Mono',ui-monospace,monospace; font-size:.82rem; background:#F3ECDD; padding:.12rem .5rem; border-radius:8px; border:1px solid var(--line); }
+.ag-rules{ color:var(--muted); font-size:.8rem; font-family:'JetBrains Mono',ui-monospace,monospace; margin-left:.4rem; }
 
-/* alerts (verdict banners) */
-[data-testid="stAlert"]{ border-radius:16px; border:1px solid var(--line); }
-[data-testid="stAlert"][kind="error"], div[data-baseweb="notification"][kind="negative"]{ background:rgba(255,93,115,.12) !important; border-color:rgba(255,93,115,.45) !important; }
-[data-testid="stAlert"][kind="success"], div[data-baseweb="notification"][kind="positive"]{ background:rgba(61,220,151,.10) !important; border-color:rgba(61,220,151,.4) !important; }
-[data-testid="stAlert"][kind="warning"], div[data-baseweb="notification"][kind="warning"]{ background:rgba(255,180,84,.11) !important; border-color:rgba(255,180,84,.42) !important; }
-[data-testid="stAlert"][kind="info"], div[data-baseweb="notification"][kind="info"]{ background:rgba(76,201,240,.09) !important; border-color:rgba(76,201,240,.35) !important; }
+/* alerts */
+[data-testid="stAlert"]{ border-radius:16px; border:2px solid var(--ink); color:var(--ink); }
+[data-testid="stAlert"] *{ color:var(--ink) !important; }
+[data-testid="stAlert"][kind="error"], div[data-baseweb="notification"][kind="negative"]{ background:var(--brick-soft) !important; }
+[data-testid="stAlert"][kind="success"], div[data-baseweb="notification"][kind="positive"]{ background:var(--sage-soft) !important; }
+[data-testid="stAlert"][kind="warning"], div[data-baseweb="notification"][kind="warning"]{ background:var(--sun-soft) !important; }
+[data-testid="stAlert"][kind="info"], div[data-baseweb="notification"][kind="info"]{ background:var(--sky-soft) !important; }
 
 /* controls */
-.stButton > button{ border-radius:999px; font-weight:600; border:1px solid var(--line); background:var(--surface2); color:var(--text); padding:.5rem 1.1rem; transition:all .15s ease; }
-.stButton > button:hover{ border-color:var(--accent); transform:translateY(-1px); box-shadow:0 8px 22px rgba(124,108,255,.28); }
-.stButton > button[kind="primary"]{ background:linear-gradient(135deg,var(--accent),#5B8CFF); border:none; color:#fff; box-shadow:0 10px 28px rgba(124,108,255,.5); }
-[data-testid="stExpander"]{ border:1px solid var(--line); border-radius:16px; background:rgba(255,255,255,.02); }
-[data-testid="stCode"], pre{ border-radius:14px !important; border:1px solid var(--line); }
-[data-testid="stDataFrame"]{ border-radius:16px; overflow:hidden; border:1px solid var(--line); }
-textarea, input, [data-baseweb="select"] > div{ border-radius:14px !important; }
+.stButton > button, .stFormSubmitButton > button{ border-radius:14px; font-weight:700; color:var(--ink); background:#fff; border:2px solid var(--ink);
+  padding:.55rem 1.1rem; box-shadow:3px 3px 0 var(--ink); transition:transform .12s ease, box-shadow .12s ease; }
+.stButton > button:hover, .stFormSubmitButton > button:hover{ transform:translate(-1px,-1px); box-shadow:4px 4px 0 var(--ink); border-color:var(--ink); color:var(--ink); }
+.stButton > button:active{ transform:translate(2px,2px); box-shadow:1px 1px 0 var(--ink); }
+.stButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"]{ background:var(--coral); color:#fff; }
+.stButton > button[kind="primary"] *{ color:#fff !important; }
+section[data-testid="stSidebar"] .stButton > button{ box-shadow:2px 2px 0 var(--ink); font-weight:600; justify-content:flex-start; }
+[data-testid="stExpander"]{ border:2px solid var(--line); border-radius:16px; background:#FFFDF8; }
+[data-testid="stCode"], pre{ border-radius:14px !important; border:1.5px solid var(--line); background:#FFFDF8 !important; }
+[data-testid="stDataFrame"]{ border-radius:16px; overflow:hidden; border:2px solid var(--line); }
+textarea, input, [data-baseweb="select"] > div{ border-radius:14px !important; background:#fff !important; border:1.5px solid #D9CDB6 !important; }
+[data-testid="stCaptionContainer"], .stCaption{ color:var(--muted); }
 
 /* results cards */
-.ag-stats{ display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:.8rem; margin:.4rem 0 1rem; }
-.ag-stat{ padding:1rem 1.1rem; border-radius:18px; border:1px solid var(--line); background:linear-gradient(160deg,var(--surface2),var(--surface)); }
-.ag-stat .v{ font-size:1.9rem; font-weight:800; letter-spacing:-.02em; } .ag-stat .l{ font-size:.78rem; color:var(--muted); margin-top:.15rem; }
-.ag-stat.good .v{ color:var(--ok); } .ag-stat.bad .v{ color:var(--bad); } .ag-stat.accent .v{ color:#C9C2FF; }
+.ag-stats{ display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:1.3rem; margin:.6rem 0 1.3rem; }
+.ag-stat{ position:relative; padding:1.3rem 1.4rem 1.2rem; border-radius:20px; border:2px solid var(--ink); box-shadow:5px 5px 0 var(--ink); }
+.ag-stat .ico{ width:38px; height:38px; border-radius:12px; display:grid; place-items:center; background:#fff; border:2px solid var(--ink); margin-bottom:.8rem; }
+.ag-stat .v{ font-family:'Fraunces',serif; font-size:2.7rem; font-weight:700; line-height:1; letter-spacing:-.02em; }
+.ag-stat .l{ font-size:.92rem; color:#4A433C; margin-top:.5rem; line-height:1.4; }
+.ag-stat.good{ background:var(--sage-soft); } .ag-stat.bad{ background:var(--brick-soft); } .ag-stat.accent{ background:var(--sky-soft); } .ag-stat.sun{ background:var(--sun-soft); }
 """
 
-FLOW = [("Untrusted content", "untrusted"), ("Content Firewall", "defence"), ("Agent", "neutral"),
-        ("Action Guard", "defence"), ("Human approval", "neutral"), ("Egress Control", "defence"),
-        ("Tools", "neutral"), ("Session Monitor", "defence")]
+# (label, material icon, tone)
+FLOW = [("Poisoned document", "description", "bad"), ("Content firewall", "cleaning_services", "def"),
+        ("AI agent", "smart_toy", "neu"), ("Action guard", "verified_user", "def"),
+        ("You approve", "how_to_reg", "warn"), ("Egress check", "outbox", "def"), ("Tools", "build", "neu")]
 
-_CHIP_KIND = {"ALLOW": "allow", "APPROVED": "approved", "BLOCK": "block", "DENIED": "denied", "ASK": "ask",
-              "SANITIZE": "sanitize", "QUARANTINE": "quarantine", "FLAG": "flag", "PASS": "pass"}
+_CHIP = {"ALLOW": ("allow", "check_circle"), "APPROVED": ("approved", "how_to_reg"), "BLOCK": ("block", "block"),
+         "DENIED": ("denied", "cancel"), "ASK": ("ask", "help"), "SANITIZE": ("sanitize", "cleaning_services"),
+         "QUARANTINE": ("quarantine", "lock"), "FLAG": ("flag", "flag"), "PASS": ("pass", "check")}
+
+
+def ms(name: str) -> str:
+    return f'<span class="ms">{html.escape(name)}</span>'
 
 
 def inject() -> None:
@@ -113,32 +147,40 @@ def inject() -> None:
 
 
 def brand() -> str:
-    return ('<div class="ag-brand"><div class="ag-logo">🛡️</div><div><b>AgentGuard</b>'
-            '<span>prompt-injection shield</span></div></div>')
+    return (f'<div class="ag-brand"><div class="ag-logo">{ms("shield")}</div>'
+            '<div><b>AgentGuard</b><span class="t">a bouncer for AI agents</span></div></div>')
 
 
 def hero() -> str:
-    flow = '<span class="ag-arrow">→</span>'.join(f'<span class="ag-node {k}">{html.escape(n)}</span>' for n, k in FLOW)
-    return ('<div class="ag-hero"><h1>AgentGuard</h1>'
-            '<p>Unprotected vs protected agent, side by side. We scan what the agent reads, and we authorise '
-            'what it does, with a human in the loop.</p>'
-            f'<div class="ag-flow">{flow}</div></div>')
+    steps = []
+    for i, (label, icon, tone) in enumerate(FLOW):
+        if i:
+            steps.append('<div class="ag-link"></div>')
+        steps.append(f'<div class="ag-step"><div class="ag-bubble {tone}">{ms(icon)}</div><small>{html.escape(label)}</small></div>')
+    return ('<div class="ag-hero"><span class="ag-tag">prompt-injection shield</span>'
+            '<h1>Your AI agent read a <em>poisoned</em> document.<br>Watch what happens next.</h1>'
+            '<p class="lead">Run the same attack against an unprotected agent and a protected one, side by side. '
+            'We check what the agent reads, approve what it does, and ask you before anything risky leaves.</p>'
+            f'<div class="ag-journey">{"".join(steps)}</div></div>')
 
 
 def chip(label: str, kind: str | None = None) -> str:
     """A pill for a FIXED label (decision / firewall action). Never pass attacker-influenced text."""
-    k = kind or _CHIP_KIND.get(label.split(" ")[0].upper(), "pass")
-    return f'<span class="ag-chip {k}">{html.escape(label)}</span>'
+    key = (kind or label.split(" ")[0]).upper()
+    cls, icon = _CHIP.get(key, ("pass", "check"))
+    return f'<span class="ag-chip {cls}">{ms(icon)}{html.escape(label)}</span>'
 
 
 def column_head(title: str, sub: str, ok: bool) -> str:
-    return (f'<div class="ag-colhead"><span class="ag-dot {"ok" if ok else "bad"}"></span>'
-            f'<h3>{html.escape(title)}</h3><small>{html.escape(sub)}</small></div>')
+    icon = "verified_user" if ok else "warning"
+    return (f'<div class="ag-colhead"><div class="ag-badge {"ok" if ok else "bad"}">{ms(icon)}</div>'
+            f'<div><h3>{html.escape(title)}</h3><small>{html.escape(sub)}</small></div></div>')
 
 
-def section(title: str) -> str:
-    return f'<div class="ag-sec">{html.escape(title)}</div>'
+def section(title: str, icon: str | None = None) -> str:
+    return f'<div class="ag-sec">{ms(icon) if icon else ""}{html.escape(title)}</div>'
 
 
-def stat(value: str, label: str, tone: str = "accent") -> str:
-    return f'<div class="ag-stat {tone}"><div class="v">{html.escape(value)}</div><div class="l">{html.escape(label)}</div></div>'
+def stat(value: str, label: str, tone: str = "accent", icon: str = "insights") -> str:
+    return (f'<div class="ag-stat {tone}"><div class="ico">{ms(icon)}</div>'
+            f'<div class="v">{html.escape(value)}</div><div class="l">{html.escape(label)}</div></div>')

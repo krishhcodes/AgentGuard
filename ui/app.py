@@ -117,7 +117,7 @@ def render_decisions(events) -> None:
     decisions = _decisions_from_events(events)
     if not decisions:
         return
-    st.markdown(theme.section("Action Guard decisions"), unsafe_allow_html=True)
+    st.markdown(theme.section("Action Guard decisions", "gavel"), unsafe_allow_html=True)
     for d in decisions:
         _, label = DECISION_STYLE.get(d["decision"], ("•", d["decision"]))
         rules = f' <span class="ag-rules">{html.escape(", ".join(d["rules"]))}</span>' if d["rules"] else ""
@@ -227,7 +227,7 @@ def render_firewall_summary(events) -> None:
     scans = [e for e in events if e.event == "content_scanned" and e.data.get("action") != "PASS"]
     if not scans:
         return
-    st.markdown(theme.section("Content Firewall"), unsafe_allow_html=True)
+    st.markdown(theme.section("Content Firewall", "cleaning_services"), unsafe_allow_html=True)
     for e in scans:
         action = e.data.get("action")
         rule_txt = html.escape(", ".join(e.rules) or "-")
@@ -313,23 +313,23 @@ def _headline_stats() -> list[str]:
         base = row("docs/m6-classifier/summary-before-fix.csv", "baseline", "dev")
         full = row("docs/m6-classifier/summary.csv", "full", "dev")
         ben = row("docs/m6-classifier/summary.csv", "full", "benign")
-        cards += [theme.stat(pct(base["asr_rate"]), "baseline attack success (dev)", "bad"),
-                  theme.stat(pct(full["asr_rate"]), "AgentGuard attack success (dev)", "good"),
-                  theme.stat(pct(full["catch_rate"]), "dev attacks caught", "accent"),
-                  theme.stat(pct(full["completion_rate"]), "task completed on attacked tasks", "accent"),
-                  theme.stat(pct(ben["completion_rate"]), "benign task completion", "good"),
-                  theme.stat(pct(ben["fpr_rate"]), "false-positive rate", "good")]
+        cards += [theme.stat(pct(base["asr_rate"]), "baseline attack success (dev)", "bad", "warning"),
+                  theme.stat(pct(full["asr_rate"]), "AgentGuard attack success (dev)", "good", "verified_user"),
+                  theme.stat(pct(full["catch_rate"]), "dev attacks caught", "accent", "radar"),
+                  theme.stat(pct(full["completion_rate"]), "task completed on attacked tasks", "accent", "task_alt"),
+                  theme.stat(pct(ben["completion_rate"]), "benign task completion", "good", "check_circle"),
+                  theme.stat(pct(ben["fpr_rate"]), "false-positive rate", "good", "thumb_up")]
     except Exception:  # missing docs must never break the page
         pass
     try:
         un = row("docs/m7-unseen/summary-v2.csv", "full", "unseen")
-        cards.append(theme.stat(pct(un["asr_rate"]), "attack success on held-out set (n=4)", "good"))
+        cards.append(theme.stat(pct(un["asr_rate"]), "attack success on held-out set (n=4)", "good", "science"))
     except Exception:
         pass
     try:
         lat = pd.read_csv(ROOT / "docs/m6-classifier/latency.csv")
         tot = lat[lat["layer"] == "TOTAL"].iloc[0]
-        cards.append(theme.stat(f"{float(tot['p95_ms']):.0f} ms", "added latency p95 (target < 2 s)", "good"))
+        cards.append(theme.stat(f"{float(tot['p95_ms']):.0f} ms", "added latency p95 (target < 2 s)", "sun", "bolt"))
     except Exception:
         pass
     return cards
@@ -338,7 +338,7 @@ def _headline_stats() -> list[str]:
 def render_results_tab() -> None:
     cards = _headline_stats()
     if cards:
-        st.markdown(theme.section("Final results (gpt-oss-20b, dev + held-out)"), unsafe_allow_html=True)
+        st.markdown(theme.section("Final results (gpt-oss-20b, dev + held-out)", "insights"), unsafe_allow_html=True)
         st.markdown(f'<div class="ag-stats">{"".join(cards)}</div>', unsafe_allow_html=True)
     results_root = ROOT / "results"
     runs = sorted(results_root.glob("*/summary.csv")) if results_root.exists() else []
@@ -385,29 +385,31 @@ with st.sidebar:
     st.caption("Protected column layers")
     st.session_state.setdefault("fw_on", True)
     st.session_state.setdefault("guard_on", True)
-    firewall_on = st.toggle("Content Firewall (scan what it reads)", key="fw_on")
-    guard_on = st.toggle("Action Guard (authorise what it does)", key="guard_on")
+    firewall_on = st.toggle(":material/cleaning_services: Content Firewall (scan what it reads)", key="fw_on")
+    guard_on = st.toggle(":material/verified_user: Action Guard (authorise what it does)", key="guard_on")
     mode = st.radio("LLM mode", list(MODES), index=list(MODES).index(settings.llm_mode), format_func=MODES.get)
-    if st.button("Run", type="primary", width='stretch'):
+    if st.button("Run", type="primary", width='stretch', icon=":material/play_arrow:"):
         with st.spinner("Running baseline and protected agents..."):
             start_run(spec, request, mode, guard_on, firewall_on)
 
     # One-click demo path (the 5-minute script): each beat sets the scenario and the layer toggles.
     st.divider()
     st.caption(f"Session monitor: session {_session_id()} (accumulates across runs)")
-    st.button("New session", key="new-session", on_click=_new_session, width="stretch")
+    st.button("New session", key="new-session", on_click=_new_session, width="stretch", icon=":material/refresh:")
     st.caption("Demo path")
-    for label, scenario_id, fw, guard in DEMO_PATH:
+    beat_icons = [":material/visibility_off:", ":material/compare_arrows:", ":material/shield:", ":material/how_to_reg:"]
+    for n, (label, scenario_id, fw, guard) in enumerate(DEMO_PATH):
         if scenario_id in scenarios:
             st.button(label, key=f"demo-{label}", width="stretch", on_click=_apply_demo_beat,
-                      args=(scenario_id, fw, guard))
+                      args=(scenario_id, fw, guard), icon=beat_icons[n % len(beat_icons)])
 
 st.markdown(theme.hero(), unsafe_allow_html=True)
 if mode == "replay":
     st.caption("REPLAY mode — responses come from recorded runs (offline).")
 
 live_tab, doc_tab, audit_tab, results_tab = st.tabs(
-    ["Live attack", "Inside the document", "Audit log", "Evaluation results"])
+    [":material/bolt: Live attack", ":material/search: Inside the document", ":material/receipt_long: Audit log",
+     ":material/insights: Evaluation results"])
 
 with live_tab:
     if "baseline_result" not in st.session_state:
