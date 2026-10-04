@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import uuid  # noqa: E402
+
 import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage  # noqa: E402
@@ -182,6 +184,15 @@ def protected_config(guard_on: bool, firewall_on: bool) -> str | None:
     return None
 
 
+def _session_id() -> str:
+    """One monitoring session per browser tab: the Session Monitor accumulates across runs until reset."""
+    return st.session_state.setdefault("session_id", uuid.uuid4().hex[:8])
+
+
+def _new_session() -> None:
+    st.session_state.pop("session_id", None)
+
+
 def start_run(spec, request: str, mode: str, guard_on: bool, firewall_on: bool) -> None:
     _clear_run_state()
     # Baseline is a plain run (no interrupts). Its errors are captured in the RunResult, so a
@@ -191,7 +202,8 @@ def start_run(spec, request: str, mode: str, guard_on: bool, firewall_on: bool) 
     config = protected_config(guard_on, firewall_on)
     st.session_state["protected_config"] = config
     if config:
-        session = RunSession(spec, config=config, user_request=request, settings=load_settings(mode))
+        session = RunSession(spec, config=config, user_request=request, settings=load_settings(mode),
+                             session_id=_session_id())
         status = session.start()
         st.session_state["guard_session"] = session
         st.session_state["guard_result"] = session.result() if status == RunSession.DONE else None
@@ -335,6 +347,8 @@ with st.sidebar:
 
     # One-click demo path (the 5-minute script): each beat sets the scenario and the layer toggles.
     st.divider()
+    st.caption(f"Session monitor: session {_session_id()} (accumulates across runs)")
+    st.button("New session", key="new-session", on_click=_new_session, width="stretch")
     st.caption("Demo path")
     for label, scenario_id, fw, guard in DEMO_PATH:
         if scenario_id in scenarios:

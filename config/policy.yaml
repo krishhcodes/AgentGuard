@@ -36,6 +36,12 @@ secret_patterns:
 
 # M5: Content Firewall. Rule-family weights sum to a per-sentence risk score; a score >= t_high is
 # removed (SANITIZE), a segment that is mostly malicious is QUARANTINEd, and t_low..t_high is FLAGged.
+session:
+  enabled: true
+  probing_blocks: 3        # blocked/denied calls before egress/write is throttled
+  slow_exfil_chars: 600    # unauthorised external chars per domain after a confidential read
+  fan_out_domains: 3       # distinct unauthorised external domains in one session
+
 firewall:
   t_low: 2
   t_high: 3

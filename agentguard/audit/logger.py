@@ -16,6 +16,7 @@ class AuditLogger:
     def __init__(self, path: Path):
         self.path = path
         self.events: list[AuditEvent] = []
+        self.listeners: list = []  # e.g. the Session Monitor folds each event as it is written
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
         except OSError as e:
@@ -30,4 +31,9 @@ class AuditLogger:
         except OSError as e:
             raise AuditWriteError(f"cannot write audit log {self.path}: {e}") from e
         self.events.append(event)
+        for fn in self.listeners:
+            try:
+                fn(event)
+            except Exception:  # a monitor bug must never break the audit trail or the run
+                pass
         return event

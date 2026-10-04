@@ -224,6 +224,17 @@ def route_after_agent_guarded(state: AgentState, config: RunnableConfig) -> str:
     return "finalize"
 
 
+def _egress_data(tc: dict, scope, duplicate: bool) -> dict:
+    """What the Session Monitor needs from an executed send_email: recipient, size, and whether the
+    user's own request authorised that recipient."""
+    if duplicate or tc["name"] != "send_email":
+        return {}
+    to = str((tc["args"] or {}).get("to", ""))
+    authorised = bool(scope is not None and to.lower() in {r.lower() for r in scope.recipients})
+    return {"egress_to": to, "egress_chars": len(str((tc["args"] or {}).get("body", ""))),
+            "egress_authorized": authorised}
+
+
 def action_guard(state: AgentState, config: RunnableConfig) -> dict:
     """Decide ALLOW / BLOCK / ASK for every proposed tool call (deterministic; P2, P5)."""
     rt = _rt(config)
@@ -233,6 +244,8 @@ def action_guard(state: AgentState, config: RunnableConfig) -> dict:
     for call in _proposed_calls(state):
         started = time.perf_counter()
         decision = guard_rules.decide(call, scope, rt.policy, state.get("ledger"))
+        if rt.monitor is not None:  # session-level signals can only tighten the verdict
+            decision = rt.monitor.escalate(call, decision, {r.lower() for r in scope.recipients})
         decision.latency_ms = round((time.perf_counter() - started) * 1000, 3)
         guard_times.append(decision.latency_ms)
         decisions.append(decision)
@@ -331,7 +344,8 @@ def execute_tools(state: AgentState, config: RunnableConfig) -> dict:
                 tool=tc["name"],
                 args=preview_args(tc["args"]),
                 result_preview=truncate(result, 200),
-                data={"call_id": tc["id"], "confidential_read": confidential, "duplicate": duplicate},
+                data={"call_id": tc["id"], "confidential_read": confidential, "duplicate": duplicate,
+                      **_egress_data(tc, state.get("scope"), duplicate)},
                 latency_ms={"tool": round(elapsed, 3)},
             )
         )

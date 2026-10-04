@@ -30,6 +30,7 @@ from agentguard.eval.oracle import AttackVerdict, OracleContext, judge_attack
 from agentguard.eval.suites import ScenarioSpec
 from agentguard.firewall.classifier import Classifier
 from agentguard.llm import LLMClient
+from agentguard.monitor import open_session
 from agentguard.policy import Policy, load_policy
 from agentguard.rag.retriever import Retriever
 from agentguard.sandbox import Sandbox, ToolRegistry
@@ -115,6 +116,7 @@ class _RunContext:
 def _setup_run(
     spec: ScenarioSpec, *, config: str, user_request: str | None,
     llm: Any, scope_llm: Any, settings: Settings, policy: Policy, classifier_llm: Any = None,
+    session_id: str | None = None,
 ) -> _RunContext:
     flags = config_flags(config)
     request = (user_request or spec.user_request).strip()
@@ -134,10 +136,15 @@ def _setup_run(
             classifier_llm.warm()
         classifier = Classifier(classifier_llm)
     audit = AuditLogger(settings.runs_dir / run_id / "audit.jsonl")
+    monitor = None
+    if flags["guard"]:  # the monitor rides on the guard: it only ever tightens a guard decision
+        monitor = open_session(policy, settings.runs_dir, session_id or run_id, run_id,
+                               persist=session_id is not None)
+        audit.listeners.append(monitor.observe)
     rt = Runtime(
         run_id=run_id, config_name=config, scenario_id=spec.id, settings=settings,
         sandbox=sandbox, registry=registry, retriever=Retriever(sandbox.corpus_documents()),
-        llm=llm, audit=audit, policy=policy, scope_llm=scope_llm, nonce=_run_nonce(spec, request, settings), classifier=classifier,
+        llm=llm, audit=audit, policy=policy, scope_llm=scope_llm, nonce=_run_nonce(spec, request, settings), classifier=classifier, monitor=monitor,
     )
     audit.emit(AuditEvent(run_id=run_id, config=config, scenario_id=spec.id, layer="runner",
                           event="run_started", data={"user_request": truncate(request, 500),
@@ -190,6 +197,7 @@ def run_scenario(
     llm: Any = None,
     scope_llm: Any = None,
     classifier_llm: Any = None,
+    session_id: str | None = None,
     human: Human | None = None,
     settings: Settings | None = None,
     policy: Policy | None = None,
@@ -200,7 +208,7 @@ def run_scenario(
     policy = policy or load_policy()
     ctx = _setup_run(spec, config=config, user_request=user_request, llm=llm,
                      scope_llm=scope_llm, settings=settings, policy=policy,
-                     classifier_llm=classifier_llm)
+                     classifier_llm=classifier_llm, session_id=session_id)
     error = None
     try:
         final = ctx.graph.invoke(ctx.initial, ctx.thread)
@@ -232,6 +240,7 @@ class RunSession:
 
     def __init__(self, spec: ScenarioSpec, *, config: str, user_request: str | None = None,
                  llm: Any = None, scope_llm: Any = None, classifier_llm: Any = None,
+                 session_id: str | None = None,
                  settings: Settings | None = None, policy: Policy | None = None):
         if config not in CONFIGS:
             raise ValueError(f"unknown config {config!r}; available: {CONFIGS}")
@@ -239,7 +248,7 @@ class RunSession:
         policy = policy or load_policy()
         self.ctx = _setup_run(spec, config=config, user_request=user_request, llm=llm,
                               scope_llm=scope_llm, settings=settings, policy=policy,
-                     classifier_llm=classifier_llm)
+                     classifier_llm=classifier_llm, session_id=session_id)
         self.state: Any = None
         self.error: str | None = None
         self.pending_payload: dict | None = None

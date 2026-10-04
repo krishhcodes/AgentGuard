@@ -94,4 +94,5 @@ class Runtime:
     policy: Any = None  # Policy (T0); used by extract_scope, action_guard and the firewall
     scope_llm: Any = None  # scope-role LLMClient-like; None -> extractor uses its fallback
     nonce: str = ""  # per-run spotlight nonce (M5)
+    monitor: Any = None  # SessionMonitor (guard on): folds audit events across the session
     classifier: Any = None  # firewall F3 Classifier (per-run call budget), M6

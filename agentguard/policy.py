@@ -36,6 +36,17 @@ class FirewallPolicy(BaseModel):
     weights: dict[str, float] = {}
 
 
+class SessionPolicy(BaseModel):
+    """Session Monitor thresholds (monitor/session.py). Conservative: ordinary tasks never reach them."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    probing_blocks: int = 3  # blocked/denied calls in a session before egress/write is throttled
+    slow_exfil_chars: int = 600  # unauthorised external chars per domain, after a confidential read
+    fan_out_domains: int = 3  # distinct unauthorised external domains in one session
+
+
 class Policy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -45,6 +56,7 @@ class Policy(BaseModel):
     directory: dict[str, str] = {}  # alias phrase (lowercased key) -> email, M2+
     high_risk_fields: list[str] = []  # write fields escalated to ASK unless the user stated them, M2+
     secret_patterns: list[str] = []  # regexes for secret-shaped egress data, M4+
+    session: SessionPolicy = SessionPolicy()  # session monitor thresholds
     firewall: FirewallPolicy = FirewallPolicy()  # content-firewall thresholds/weights, M5+
 
     def is_confidential(self, path: str) -> bool:
