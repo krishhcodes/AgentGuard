@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import html  # noqa: E402
 import uuid  # noqa: E402
 
 import pandas as pd  # noqa: E402
@@ -28,7 +29,10 @@ from agentguard.config import load_settings  # noqa: E402
 from agentguard.eval.suites import load_scenarios  # noqa: E402
 from agentguard.runner import RunSession, run_scenario  # noqa: E402
 
-st.set_page_config(page_title="AgentGuard", layout="wide")
+st.set_page_config(page_title="AgentGuard", page_icon="🛡️", layout="wide")
+from ui import theme  # noqa: E402
+
+theme.inject()
 
 MODES = {"auto": "Auto (reuse recorded runs; call Groq only for new)",
          "record": "Live (Groq), recorded for replay", "replay": "Replay (offline, recorded runs)",
@@ -113,11 +117,12 @@ def render_decisions(events) -> None:
     decisions = _decisions_from_events(events)
     if not decisions:
         return
-    st.markdown("**Action Guard decisions**")
+    st.markdown(theme.section("Action Guard decisions"), unsafe_allow_html=True)
     for d in decisions:
-        emoji, label = DECISION_STYLE.get(d["decision"], ("•", d["decision"]))
-        rules = f" · rules: {', '.join(d['rules'])}" if d["rules"] else ""
-        st.markdown(f"{emoji} **{label}** `{d['tool']}`{rules}")  # labels/rules are fixed, safe
+        _, label = DECISION_STYLE.get(d["decision"], ("•", d["decision"]))
+        rules = f' <span class="ag-rules">{html.escape(", ".join(d["rules"]))}</span>' if d["rules"] else ""
+        st.markdown(f'{theme.chip(label, d["decision"].lower())}<span class="ag-tool">{html.escape(str(d["tool"]))}</span>'
+                    f'{rules}', unsafe_allow_html=True)  # fixed labels; tool/rule ids are escaped
         if d["reason"]:
             st.text(d["reason"])  # reason embeds attacker-influenced args -> plain text only
         for ev in d.get("evidence", []):  # M4: attribute the decision to the source document/view
@@ -210,7 +215,7 @@ def start_run(spec, request: str, mode: str, guard_on: bool, firewall_on: bool) 
 
 
 def render_baseline_column(result) -> None:
-    st.subheader("🔴 Unprotected")
+    st.markdown(theme.column_head("Unprotected", "baseline agent", ok=False), unsafe_allow_html=True)
     st.caption(f"baseline · {result.run_id} · {result.status} · {result.duration_s:.1f}s")
     render_verdict(result)
     render_outbox(result.sandbox)
@@ -222,17 +227,18 @@ def render_firewall_summary(events) -> None:
     scans = [e for e in events if e.event == "content_scanned" and e.data.get("action") != "PASS"]
     if not scans:
         return
-    st.markdown("**Content Firewall**")
+    st.markdown(theme.section("Content Firewall"), unsafe_allow_html=True)
     for e in scans:
         action = e.data.get("action")
-        emoji = {"SANITIZE": "✂️", "QUARANTINE": "🚫", "FLAG": "⚑"}.get(action, "•")
-        st.markdown(f"{emoji} **{action}** · rules: {', '.join(e.rules) or '—'}")
+        rule_txt = html.escape(", ".join(e.rules) or "-")
+        st.markdown(f'{theme.chip(str(action), str(action).lower())}<span class="ag-rules">{rule_txt}</span>',
+                    unsafe_allow_html=True)
         st.text(f"source: {e.data.get('source', '')}")  # source is untrusted-derived -> plain text
 
 
 def render_guard_column() -> None:
     config = st.session_state.get("protected_config")
-    st.subheader(f"🟢 Protected · {config or ''}")
+    st.markdown(theme.column_head("Protected", config or "no layers on", ok=True), unsafe_allow_html=True)
     session = st.session_state.get("guard_session")
     result = st.session_state.get("guard_result")
     if session is None:
@@ -293,7 +299,47 @@ def render_inside_document_tab(spec) -> None:
         st.divider()
 
 
+def _headline_stats() -> list[str]:
+    """Final numbers from the committed docs (not the latest scratch run)."""
+    def row(path, config, split):
+        df = pd.read_csv(ROOT / path)
+        return df[(df["config"] == config) & (df["split"] == split)].iloc[0]
+
+    def pct(x):
+        return f"{float(x) * 100:.0f}%"
+
+    cards = []
+    try:
+        base = row("docs/m6-classifier/summary-before-fix.csv", "baseline", "dev")
+        full = row("docs/m6-classifier/summary.csv", "full", "dev")
+        ben = row("docs/m6-classifier/summary.csv", "full", "benign")
+        cards += [theme.stat(pct(base["asr_rate"]), "baseline attack success (dev)", "bad"),
+                  theme.stat(pct(full["asr_rate"]), "AgentGuard attack success (dev)", "good"),
+                  theme.stat(pct(full["catch_rate"]), "dev attacks caught", "accent"),
+                  theme.stat(pct(full["completion_rate"]), "task completed on attacked tasks", "accent"),
+                  theme.stat(pct(ben["completion_rate"]), "benign task completion", "good"),
+                  theme.stat(pct(ben["fpr_rate"]), "false-positive rate", "good")]
+    except Exception:  # missing docs must never break the page
+        pass
+    try:
+        un = row("docs/m7-unseen/summary-v2.csv", "full", "unseen")
+        cards.append(theme.stat(pct(un["asr_rate"]), "attack success on held-out set (n=4)", "good"))
+    except Exception:
+        pass
+    try:
+        lat = pd.read_csv(ROOT / "docs/m6-classifier/latency.csv")
+        tot = lat[lat["layer"] == "TOTAL"].iloc[0]
+        cards.append(theme.stat(f"{float(tot['p95_ms']):.0f} ms", "added latency p95 (target < 2 s)", "good"))
+    except Exception:
+        pass
+    return cards
+
+
 def render_results_tab() -> None:
+    cards = _headline_stats()
+    if cards:
+        st.markdown(theme.section("Final results (gpt-oss-20b, dev + held-out)"), unsafe_allow_html=True)
+        st.markdown(f'<div class="ag-stats">{"".join(cards)}</div>', unsafe_allow_html=True)
     results_root = ROOT / "results"
     runs = sorted(results_root.glob("*/summary.csv")) if results_root.exists() else []
     if not runs:
@@ -327,6 +373,7 @@ scenarios = _scenarios()
 settings = load_settings()
 
 with st.sidebar:
+    st.markdown(theme.brand(), unsafe_allow_html=True)
     st.header("Scenario")
     ids = sorted(scenarios, key=lambda i: (i != "plain-01", not scenarios[i].is_attack, i))
     sid = st.selectbox("Attack or task", ids, key="sid", format_func=lambda i: f"{i}: {scenarios[i].title}")
@@ -355,9 +402,7 @@ with st.sidebar:
             st.button(label, key=f"demo-{label}", width="stretch", on_click=_apply_demo_beat,
                       args=(scenario_id, fw, guard))
 
-st.title("AgentGuard")
-st.caption("Unprotected vs protected agent, side by side: Content Firewall (input) + Action Guard "
-           "(output) with live human approval.")
+st.markdown(theme.hero(), unsafe_allow_html=True)
 if mode == "replay":
     st.caption("REPLAY mode — responses come from recorded runs (offline).")
 
