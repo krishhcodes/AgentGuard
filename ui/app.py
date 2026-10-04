@@ -25,6 +25,7 @@ import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage  # noqa: E402
 
+from agentguard.alerts import AlertConfig, read_alerts  # noqa: E402
 from agentguard.config import load_settings  # noqa: E402
 from agentguard.eval.suites import load_scenarios  # noqa: E402
 from agentguard.runner import RunSession, run_scenario  # noqa: E402
@@ -259,7 +260,20 @@ def render_guard_column() -> None:
         render_trace(result.messages, result.status)
 
 
+def render_alerts_panel() -> None:
+    cfg = AlertConfig.from_env()
+    st.markdown(theme.section("Security alerts", "notifications"), unsafe_allow_html=True)
+    st.caption("Emailing a redacted alert to the reviewer is ON." if cfg.real else
+               "Dry-run: alerts are recorded here and not emailed (set the SMTP fields in .env to enable).")
+    rows = read_alerts(settings.runs_dir, 8)
+    if not rows:
+        st.caption("No alerts yet. One is raised when confidential data is read without permission or about to leave.")
+    for r in rows:  # destination/scenario may be attacker-influenced -> plain text
+        st.text(f"[{r['status']}] {r['decision']} {', '.join(r['rules'])} - {r['scenario_id']} -> {r['destination'] or '-'}")
+
+
 def render_audit_tab() -> None:
+    render_alerts_panel()
     results = [r for r in (st.session_state.get("guard_result"), st.session_state.get("baseline_result")) if r]
     if not results:
         st.info("Run a scenario to see its audit log.")

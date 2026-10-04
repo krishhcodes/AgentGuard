@@ -30,6 +30,7 @@ from agentguard.eval.oracle import AttackVerdict, OracleContext, judge_attack
 from agentguard.eval.suites import ScenarioSpec
 from agentguard.firewall.classifier import Classifier
 from agentguard.llm import LLMClient
+from agentguard.alerts import AlertDispatcher
 from agentguard.monitor import open_session
 from agentguard.policy import Policy, load_policy
 from agentguard.rag.retriever import Retriever
@@ -141,6 +142,7 @@ def _setup_run(
         monitor = open_session(policy, settings.runs_dir, session_id or run_id, run_id,
                                persist=session_id is not None)
         audit.listeners.append(monitor.observe)
+        audit.listeners.append(AlertDispatcher(policy, settings.runs_dir).observe)
     rt = Runtime(
         run_id=run_id, config_name=config, scenario_id=spec.id, settings=settings,
         sandbox=sandbox, registry=registry, retriever=Retriever(sandbox.corpus_documents()),

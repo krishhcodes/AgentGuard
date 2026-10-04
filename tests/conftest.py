@@ -15,6 +15,11 @@ LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 
 
 @pytest.fixture(autouse=True)
+def no_real_alerts(monkeypatch):
+    monkeypatch.setenv("AGENTGUARD_ALERTS_SEND", "0")
+
+
+@pytest.fixture(autouse=True)
 def no_network(monkeypatch):
     """Every test runs offline: any non-loopback connection attempt fails loudly.
 

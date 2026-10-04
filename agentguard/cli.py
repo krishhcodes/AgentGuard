@@ -173,6 +173,7 @@ def cmd_eval(args) -> int:
     from agentguard.eval.harness import run_suite
     from agentguard.eval.report import render_markdown, write_latency_csv, write_misses_csv, write_summary_csv
 
+    os.environ["AGENTGUARD_ALERTS_SEND"] = "0"  # evals record alerts but never email them
     if args.patient:
         os.environ["AGENTGUARD_PATIENT_S"] = str(6 * 3600)
     if args.freeze and not _freeze_ok(args):
