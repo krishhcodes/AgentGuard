@@ -164,7 +164,7 @@ def render_approval_card(session: RunSession) -> None:
             choices[ask["call_id"]] = st.radio(
                 "Decision", ["deny", "approve"], horizontal=True, key=f"ask-{ask['call_id']}",
                 format_func=lambda s: s.capitalize())
-        submitted = st.form_submit_button("Submit decision(s)", type="primary")
+        submitted = st.form_submit_button("Submit decision(s)", type="primary", icon=":material/gavel:")
     if submitted:
         status = session.resume(choices)
         if status == RunSession.DONE:
@@ -341,7 +341,8 @@ def render_results_tab() -> None:
         st.markdown(theme.section("Final results (gpt-oss-20b, dev + held-out)", "insights"), unsafe_allow_html=True)
         st.markdown(f'<div class="ag-stats">{"".join(cards)}</div>', unsafe_allow_html=True)
     results_root = ROOT / "results"
-    runs = sorted(results_root.glob("*/summary.csv")) if results_root.exists() else []
+    # timestamped run folders only (20…), not archived folders such as _unseen_v1_frozen
+    runs = sorted(results_root.glob("2*/summary.csv")) if results_root.exists() else []
     if not runs:
         st.info("No evaluation results yet. Run `python -m agentguard eval` to measure the suite.")
         return

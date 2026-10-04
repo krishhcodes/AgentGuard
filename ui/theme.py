@@ -110,8 +110,8 @@ section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{ gap:.9rem; }
   padding:.55rem 1.1rem; box-shadow:3px 3px 0 var(--ink); transition:transform .12s ease, box-shadow .12s ease; }
 .stButton > button:hover, .stFormSubmitButton > button:hover{ transform:translate(-1px,-1px); box-shadow:4px 4px 0 var(--ink); border-color:var(--ink); color:var(--ink); }
 .stButton > button:active{ transform:translate(2px,2px); box-shadow:1px 1px 0 var(--ink); }
-.stButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"]{ background:var(--coral); color:#fff; }
-.stButton > button[kind="primary"] *{ color:#fff !important; }
+.stButton > button[kind^="primary"], .stFormSubmitButton > button[kind^="primary"]{ background:var(--coral); color:#fff; }
+.stButton > button[kind^="primary"] *, .stFormSubmitButton > button[kind^="primary"] *{ color:#fff !important; }
 section[data-testid="stSidebar"] .stButton > button{ box-shadow:2px 2px 0 var(--ink); font-weight:600; justify-content:flex-start; }
 [data-testid="stExpander"]{ border:2px solid var(--line); border-radius:16px; background:#FFFDF8; }
 [data-testid="stCode"], pre{ border-radius:14px !important; border:1.5px solid var(--line); background:#FFFDF8 !important; }
