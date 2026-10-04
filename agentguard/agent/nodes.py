@@ -22,6 +22,7 @@ from agentguard.audit.events import preview_args, truncate
 from agentguard import firewall as fw
 from agentguard.firewall import SPOTLIGHT_CLAUSE
 from agentguard.guard import rules as guard_rules
+from agentguard.guard.egress import egress_risk
 from agentguard.guard.taint import TaintLedger
 from agentguard.llm import LLMUnavailable
 from agentguard.scope import extract_scope as run_scope_extractor
@@ -261,7 +262,7 @@ def action_guard(state: AgentState, config: RunnableConfig) -> dict:
 
 
 def route_after_guard(state: AgentState, config: RunnableConfig) -> str:
-    return "human_gate" if any(d.decision == guard_rules.ASK for d in state["decisions"]) else "execute_tools"
+    return "human_gate" if any(d.decision == guard_rules.ASK for d in state["decisions"]) else "egress_control"
 
 
 def human_gate(state: AgentState, config: RunnableConfig) -> dict:
@@ -290,6 +291,40 @@ def human_gate(state: AgentState, config: RunnableConfig) -> dict:
 
 
 _PERMITTED = {guard_rules.ALLOW, "APPROVED"}
+
+
+def egress_control(state: AgentState, config: RunnableConfig) -> dict:
+    """Final gate before execution: sensitive data going to a destination the user did not name gets a
+    second, escalated confirmation, even if the guard allowed it or a human already approved it.
+    Re-execution safe: nothing happens before interrupt() (LangGraph re-runs this node on resume)."""
+    rt = _rt(config)
+    started = time.perf_counter()
+    last = next((m for m in reversed(state["messages"]) if isinstance(m, AIMessage)), None)
+    calls = {tc["id"]: tc for tc in (last.tool_calls if last is not None else [])}
+    flagged = []
+    for d in state["decisions"]:
+        tc = calls.get(d.call_id)
+        if d.decision in _PERMITTED and tc is not None:
+            hit = egress_risk(tc, state["scope"], rt.policy, state.get("ledger"), rt.monitor)
+            if hit is not None:
+                flagged.append((d, hit))
+    ms = (time.perf_counter() - started) * 1000
+    if not flagged:
+        return {"timings": {"egress": [ms]}}
+    asks = [{"call_id": d.call_id, "tool": d.tool, "args": d.args_redacted, "rules": [h.rule_id],
+             "reason": h.reason, "evidence": h.evidence, "escalated": True} for d, h in flagged]
+    answers = interrupt({"asks": asks, "escalated": True}) or {}
+    for d, h in flagged:
+        approved = str(answers.get(d.call_id, "deny")).lower() == "approve"
+        d.rule_hits = [*d.rule_hits, h]
+        d.decision = "APPROVED" if approved else "DENIED"
+        rt.audit.emit(AuditEvent(
+            run_id=rt.run_id, config=rt.config_name, scenario_id=rt.scenario_id,
+            layer="human_gate", event="human_decision", tool=d.tool, args=d.args_redacted,
+            decision=d.decision, rules=[h.rule_id], reason=h.reason, scope_ref=d.scope_ref,
+            evidence=h.evidence, data={"call_id": d.call_id, "escalated": True},
+        ))
+    return {"decisions": state["decisions"], "timings": {"egress": [ms]}}
 
 
 def execute_tools(state: AgentState, config: RunnableConfig) -> dict:

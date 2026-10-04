@@ -60,6 +60,7 @@ def _build_guarded_graph():
     g.add_node("agent", nodes.agent)
     g.add_node("action_guard", nodes.action_guard)
     g.add_node("human_gate", nodes.human_gate)
+    g.add_node("egress_control", nodes.egress_control)
     g.add_node("execute_tools", nodes.execute_tools)
     g.add_node("finalize", nodes.finalize)
 
@@ -70,8 +71,9 @@ def _build_guarded_graph():
     g.add_conditional_edges("ingest_untrusted", nodes.route_after_ingest_guarded, ["agent", "extract_scope"])
     g.add_edge("extract_scope", END)
     g.add_conditional_edges("agent", nodes.route_after_agent_guarded, ["action_guard", "finalize"])
-    g.add_conditional_edges("action_guard", nodes.route_after_guard, ["human_gate", "execute_tools"])
-    g.add_edge("human_gate", "execute_tools")
+    g.add_conditional_edges("action_guard", nodes.route_after_guard, ["human_gate", "egress_control"])
+    g.add_edge("human_gate", "egress_control")
+    g.add_edge("egress_control", "execute_tools")  # the last deterministic gate before anything runs
     g.add_edge("execute_tools", "ingest_untrusted")
     g.add_edge("finalize", END)
     # A checkpointer is required for interrupt()/resume at human_gate; MemorySaver is per-run.
