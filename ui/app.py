@@ -389,6 +389,9 @@ with st.sidebar:
     firewall_on = st.toggle(":material/cleaning_services: Content Firewall (scan what it reads)", key="fw_on")
     guard_on = st.toggle(":material/verified_user: Action Guard (authorise what it does)", key="guard_on")
     mode = st.radio("LLM mode", list(MODES), index=list(MODES).index(settings.llm_mode), format_func=MODES.get)
+    if mode in ("off", "record"):
+        st.caption("Live runs vary: the unprotected agent is only hijacked by ~62% of attacks and "
+                   "does not always answer correctly. Use Replay for a repeatable demo.")
     if st.button("Run", type="primary", width='stretch', icon=":material/play_arrow:"):
         with st.spinner("Running baseline and protected agents..."):
             start_run(spec, request, mode, guard_on, firewall_on)
