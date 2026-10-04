@@ -27,6 +27,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage  # noqa
 
 from agentguard.alerts import AlertConfig, read_alerts  # noqa: E402
 from agentguard.config import load_settings  # noqa: E402
+from agentguard.llm import load_groq_keys  # noqa: E402
 from agentguard.eval.suites import load_scenarios  # noqa: E402
 from agentguard.runner import RunSession, run_scenario  # noqa: E402
 
@@ -403,7 +404,8 @@ with st.sidebar:
     st.session_state.setdefault("guard_on", True)
     firewall_on = st.toggle(":material/cleaning_services: Content Firewall (scan what it reads)", key="fw_on")
     guard_on = st.toggle(":material/verified_user: Action Guard (authorise what it does)", key="guard_on")
-    mode = st.radio("LLM mode", list(MODES), index=list(MODES).index(settings.llm_mode), format_func=MODES.get)
+    default_mode = settings.llm_mode if load_groq_keys() else "replay"  # no key (fresh deploy): offline recorded runs
+    mode = st.radio("LLM mode", list(MODES), index=list(MODES).index(default_mode), format_func=MODES.get)
     if mode in ("off", "record"):
         st.caption("Live runs vary: the unprotected agent is only hijacked by ~62% of attacks and "
                    "does not always answer correctly. Use Replay for a repeatable demo.")

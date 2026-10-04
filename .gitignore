@@ -1,7 +1,7 @@
 .venv/
 __pycache__/
 *.pyc
-.pytest_cache/
+.pytest_.streamlit/secrets.toml
 .env
 runs/
 cache/
